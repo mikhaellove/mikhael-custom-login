@@ -1,0 +1,12 @@
+<?php
+/*
+Plugin Name: Mikhael's Custom Login
+Description: A plugin to add custom login, registration, password reset, etc to Wordpress.
+Version: 1.3.1
+Author: Mikhael Love
+*/
+
+// Exit if accessed directly
+if (!defined('ABSPATH')) {
+    exit;
+}

@@ -1,0 +1,493 @@
+/**
+ * Custom Secure Auth - Frontend Styles
+ *
+ * Non-invasive styling that inherits theme defaults
+ * Flexbox grid system with responsive breakpoints
+ *
+ * @package CustomSecureAuth
+ */
+
+/* ==========================================================================
+   Flexbox Grid System
+   ========================================================================== */
+
+.auth-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.auth-grid > * {
+    flex: 1 1 auto;
+    min-width: 0; /* Prevent flex item overflow */
+}
+
+.col-33 {
+    flex-basis: calc(33.333% - 10px);
+}
+
+.col-50 {
+    flex-basis: calc(50% - 7.5px);
+}
+
+.col-100 {
+    flex-basis: 100%;
+}
+
+/* ==========================================================================
+   Form Container
+   ========================================================================== */
+
+.csa-form-container {
+    max-width: 500px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.csa-form-wrapper {
+    /* Inherit theme styles */
+    font-family: inherit;
+    background-color: inherit;
+    color: inherit;
+}
+
+/* ==========================================================================
+   Form Elements
+   ========================================================================== */
+
+.csa-form-field {
+    margin-bottom: 15px;
+}
+
+.csa-form-field label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+    color: inherit;
+}
+
+.csa-form-field label.required::after {
+    content: " *";
+    color: #d63638;
+}
+
+.csa-form-field input[type="text"],
+.csa-form-field input[type="email"],
+.csa-form-field input[type="password"],
+.csa-form-field input[type="tel"],
+.csa-form-field input[type="url"],
+.csa-form-field input[type="number"],
+.csa-form-field input[type="date"],
+.csa-form-field select,
+.csa-form-field textarea,
+/* Also style inputs outside .csa-form-field for backward compatibility */
+.csa-form input[type="text"],
+.csa-form input[type="email"],
+.csa-form input[type="password"],
+.csa-form input[type="tel"],
+.csa-form input[type="url"],
+.csa-form input[type="number"],
+.csa-form input[type="date"],
+.csa-form select,
+.csa-form textarea,
+/* Auth forms */
+form[id^="csa-"] input[type="text"],
+form[id^="csa-"] input[type="email"],
+form[id^="csa-"] input[type="password"],
+form[id^="csa-"] input[type="tel"],
+form[id^="csa-"] input[type="url"],
+form[id^="csa-"] input[type="number"],
+form[id^="csa-"] select,
+form[id^="csa-"] textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: inherit;
+    background-color: inherit;
+    transition: border-color 0.2s ease-in-out;
+    box-sizing: border-box;
+}
+
+.csa-form-field input:focus,
+.csa-form-field select:focus,
+.csa-form-field textarea:focus,
+.csa-form input:focus,
+.csa-form select:focus,
+.csa-form textarea:focus,
+form[id^="csa-"] input:focus,
+form[id^="csa-"] select:focus,
+form[id^="csa-"] textarea:focus {
+    outline: 2px solid #2271b1;
+    outline-offset: 0;
+    border-color: #2271b1;
+}
+
+.csa-form-field textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.csa-form-field select {
+    cursor: pointer;
+}
+
+.csa-form-field input[type="checkbox"],
+.csa-form-field input[type="radio"] {
+    margin-right: 6px;
+    cursor: pointer;
+}
+
+/* Checkbox/Radio wrapper */
+.csa-checkbox-wrapper,
+.csa-radio-wrapper {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.csa-checkbox-wrapper label,
+.csa-radio-wrapper label {
+    margin-bottom: 0;
+    cursor: pointer;
+    font-weight: normal;
+}
+
+/* Field help text */
+.csa-field-help {
+    font-size: 12px;
+    color: #666;
+    margin-top: 4px;
+    display: block;
+}
+
+/* ==========================================================================
+   Buttons
+   ========================================================================== */
+
+.csa-button,
+.csa-form-field input[type="submit"],
+.csa-form-field button[type="submit"] {
+    display: inline-block;
+    padding: 10px 20px;
+    background-color: #2271b1;
+    color: #fff;
+    border: 1px solid #2271b1;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.5;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+}
+
+.csa-button:hover,
+.csa-form-field input[type="submit"]:hover,
+.csa-form-field button[type="submit"]:hover {
+    background-color: #135e96;
+    border-color: #135e96;
+    color: #fff;
+}
+
+.csa-button:focus,
+.csa-form-field input[type="submit"]:focus,
+.csa-form-field button[type="submit"]:focus {
+    outline: 2px solid #2271b1;
+    outline-offset: 2px;
+}
+
+.csa-button:disabled,
+.csa-form-field input[type="submit"]:disabled,
+.csa-form-field button[type="submit"]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.csa-button-secondary {
+    background-color: #fff;
+    color: #2271b1;
+    border-color: #2271b1;
+}
+
+.csa-button-secondary:hover {
+    background-color: #f0f0f1;
+    color: #135e96;
+    border-color: #135e96;
+}
+
+/* ==========================================================================
+   Messages
+   ========================================================================== */
+
+.csa-message {
+    padding: 12px 15px;
+    margin-bottom: 20px;
+    border-radius: 4px;
+    border-left: 4px solid;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.csa-error {
+    background-color: #fcf0f1;
+    border-left-color: #d63638;
+    color: #3c434a;
+}
+
+.csa-success {
+    background-color: #edfaef;
+    border-left-color: #00a32a;
+    color: #3c434a;
+}
+
+.csa-warning {
+    background-color: #fcf9e8;
+    border-left-color: #dba617;
+    color: #3c434a;
+}
+
+.csa-info {
+    background-color: #e5f5fa;
+    border-left-color: #2271b1;
+    color: #3c434a;
+}
+
+/* Inline error messages for fields */
+.csa-field-error {
+    display: block;
+    color: #d63638;
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+.csa-form-field.has-error input,
+.csa-form-field.has-error select,
+.csa-form-field.has-error textarea {
+    border-color: #d63638;
+}
+
+/* ==========================================================================
+   Loading States
+   ========================================================================== */
+
+.csa-loading {
+    position: relative;
+    pointer-events: none;
+    opacity: 0.6;
+}
+
+.csa-loading::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
+    border: 2px solid #2271b1;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: csa-spin 0.6s linear infinite;
+}
+
+@keyframes csa-spin {
+    to { transform: rotate(360deg); }
+}
+
+.csa-button-loading {
+    position: relative;
+    color: transparent !important;
+    pointer-events: none;
+}
+
+.csa-button-loading::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 16px;
+    height: 16px;
+    margin: -8px 0 0 -8px;
+    border: 2px solid #fff;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: csa-spin 0.6s linear infinite;
+}
+
+/* ==========================================================================
+   Form Links
+   ========================================================================== */
+
+.csa-form-links {
+    margin-top: 20px;
+    text-align: center;
+    font-size: 14px;
+}
+
+.csa-form-links a {
+    color: #2271b1;
+    text-decoration: none;
+}
+
+.csa-form-links a:hover {
+    text-decoration: underline;
+}
+
+.csa-form-links a:focus {
+    outline: 2px solid #2271b1;
+    outline-offset: 2px;
+}
+
+/* ==========================================================================
+   Password Strength Indicator
+   ========================================================================== */
+
+.csa-password-strength {
+    margin-top: 8px;
+    height: 4px;
+    background-color: #ddd;
+    border-radius: 2px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.csa-password-strength-bar {
+    height: 100%;
+    transition: all 0.3s ease;
+    border-radius: 2px;
+}
+
+.csa-password-strength.weak .csa-password-strength-bar {
+    width: 33%;
+    background-color: #d63638;
+}
+
+.csa-password-strength.medium .csa-password-strength-bar {
+    width: 66%;
+    background-color: #dba617;
+}
+
+.csa-password-strength.strong .csa-password-strength-bar {
+    width: 100%;
+    background-color: #00a32a;
+}
+
+.csa-password-strength-text {
+    font-size: 12px;
+    margin-top: 4px;
+    color: #666;
+}
+
+/* ==========================================================================
+   reCAPTCHA Badge Positioning
+   ========================================================================== */
+
+.grecaptcha-badge {
+    z-index: 999;
+}
+
+/* ==========================================================================
+   Accessibility
+   ========================================================================== */
+
+.csa-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+}
+
+/* High contrast focus states */
+@media (prefers-contrast: high) {
+    .csa-form-field input:focus,
+    .csa-form-field select:focus,
+    .csa-form-field textarea:focus,
+    .csa-button:focus {
+        outline-width: 3px;
+    }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    .csa-form-field input,
+    .csa-form-field select,
+    .csa-form-field textarea,
+    .csa-button,
+    .csa-loading::after,
+    .csa-button-loading::after,
+    .csa-password-strength,
+    .csa-password-strength-bar {
+        transition: none;
+        animation: none;
+    }
+}
+
+/* ==========================================================================
+   Responsive Breakpoints
+   ========================================================================== */
+
+@media (max-width: 600px) {
+    .auth-grid {
+        gap: 10px;
+    }
+
+    .col-33,
+    .col-50 {
+        flex-basis: 100%;
+    }
+
+    .csa-form-container {
+        padding: 15px;
+    }
+
+    .csa-form-field input[type="text"],
+    .csa-form-field input[type="email"],
+    .csa-form-field input[type="password"],
+    .csa-form-field input[type="tel"],
+    .csa-form-field input[type="url"],
+    .csa-form-field input[type="number"],
+    .csa-form-field input[type="date"],
+    .csa-form-field select,
+    .csa-form-field textarea {
+        font-size: 16px; /* Prevent zoom on iOS */
+    }
+
+    .csa-button,
+    .csa-form-field input[type="submit"],
+    .csa-form-field button[type="submit"] {
+        width: 100%;
+        padding: 12px 20px;
+    }
+}
+
+@media (max-width: 400px) {
+    .csa-form-container {
+        padding: 10px;
+    }
+
+    .csa-message {
+        padding: 10px 12px;
+        font-size: 13px;
+    }
+}
+
+/* ==========================================================================
+   Print Styles
+   ========================================================================== */
+
+@media print {
+    .csa-button,
+    .csa-form-links {
+        display: none;
+    }
+}
