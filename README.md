@@ -10,7 +10,7 @@ A privacy-first, security-hardened authentication plugin for WordPress that I bu
 
 After testing dozens of authentication plugins for my adult content site, I realized they all fell short in one critical area: user privacy. Most plugins leak whether a username or email exists through timing attacks, error messages, or REST API endpoints. This makes it trivial for stalkers or bad actors to enumerate users.
 
-I needed something better. So I built it.
+I needed something better. So I built it. 
 
 ## Core Philosophy
 
