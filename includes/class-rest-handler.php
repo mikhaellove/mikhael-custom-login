@@ -241,19 +241,12 @@ class CSA_Rest_Handler extends WP_REST_Controller {
                 array('status' => 400)
             );
         }
-    
-        if (username_exists($username)) {
+
+        // Check both username and email existence with generic error (prevents enumeration)
+        if (username_exists($username) || email_exists($email)) {
             return new WP_Error(
-                'csa_username_exists',
-                __('Username already exists.', 'custom-secure-auth'),
-                array('status' => 400)
-            );
-        }
-    
-        if (email_exists($email)) {
-            return new WP_Error(
-                'csa_email_exists',
-                __('Email already exists.', 'custom-secure-auth'),
+                'csa_registration_conflict',
+                __('Unable to complete registration with the provided information. Please try different credentials or contact support if you need assistance.', 'custom-secure-auth'),
                 array('status' => 400)
             );
         }
@@ -418,20 +411,7 @@ class CSA_Rest_Handler extends WP_REST_Controller {
         // Use WordPress core retrieve_password function
         $result = retrieve_password($user_login);
 
-        if (is_wp_error($result)) {
-            $this->log_security_event('lost_password_failed', $this->get_user_ip(), array(
-                'user_login' => $user_login,
-                'error' => $result->get_error_message(),
-            ));
-
-            return new WP_Error(
-                'csa_retrieve_password_failed',
-                __('Unable to process password reset request. Please verify your username or email.', 'custom-secure-auth'),
-                array('status' => 400)
-            );
-        }
-
-        // Send custom recovery email
+        // Send custom recovery email if user exists
         $user = null;
         if (strpos($user_login, '@')) {
             $user = get_user_by('email', $user_login);
@@ -439,17 +419,24 @@ class CSA_Rest_Handler extends WP_REST_Controller {
             $user = get_user_by('login', $user_login);
         }
 
-        if ($user) {
+        if ($user && !is_wp_error($result)) {
             $this->send_recovery_email($user->ID, $user->user_login, $user->user_email);
+
+            $this->log_security_event('lost_password_success', $this->get_user_ip(), array(
+                'user_login' => $user_login,
+            ));
+        } else {
+            // Log failed attempt but don't reveal it to user
+            $this->log_security_event('lost_password_failed', $this->get_user_ip(), array(
+                'user_login' => $user_login,
+                'error' => is_wp_error($result) ? $result->get_error_message() : 'User not found',
+            ));
         }
 
-        $this->log_security_event('lost_password_success', $this->get_user_ip(), array(
-            'user_login' => $user_login,
-        ));
-
+        // Always return success message to prevent account enumeration
         return rest_ensure_response(array(
             'success' => true,
-            'message' => __('Password reset link has been sent to your email.', 'custom-secure-auth'),
+            'message' => __('If an account with that username or email exists, you will receive a password reset link shortly.', 'custom-secure-auth'),
         ));
     }
 

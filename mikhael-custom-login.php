@@ -136,16 +136,10 @@ class Custom_Secure_Auth {
      * Enqueue admin assets
      */
     public function enqueue_admin_assets($hook) {
-        // Debug: log the hook value
-        error_log('CSA Hook: ' . $hook);
-
         // Only load on our settings page
         if (strpos($hook, 'custom-secure-auth') === false) {
-            error_log('CSA: Hook check failed, not loading assets');
             return;
         }
-
-        error_log('CSA: Loading admin assets');
 
         wp_enqueue_style('wp-color-picker');
         wp_enqueue_script('jquery-ui-sortable');
