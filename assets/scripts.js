@@ -64,8 +64,9 @@
         /**
          * Generate username via REST API
          */
-        generateUsername: function($field) {
+        generateUsername: function($field, callback) {
             if (!window.csaData || !window.csaData.restUrl) {
+                if (callback) callback();
                 return;
             }
 
@@ -77,9 +78,11 @@
                     if (response.success && response.username) {
                         $field.val(response.username);
                     }
+                    if (callback) callback();
                 },
                 error: function() {
                     // Silently fail - feature might be disabled
+                    if (callback) callback();
                 }
             });
         },
@@ -106,9 +109,13 @@
             // Fun username generator refresh icon
             $(document).on('click', '.csa-username-refresh', function(e) {
                 e.preventDefault();
+                const $icon = $(e.currentTarget);
                 const $field = $('.csa-fun-username-field');
                 if ($field.length) {
-                    this.generateUsername($field);
+                    $icon.addClass('csa-username-refresh-spinning');
+                    this.generateUsername($field, function() {
+                        $icon.removeClass('csa-username-refresh-spinning');
+                    });
                 }
             }.bind(this));
 

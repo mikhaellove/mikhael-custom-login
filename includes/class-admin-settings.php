@@ -68,6 +68,10 @@ class CSA_Admin_Settings {
                 'title' => __('Registration Grid Builder', 'custom-secure-auth'),
                 'icon' => 'dashicons-editor-table',
             ),
+            'username_policy' => array(
+                'title' => __('Username Policy', 'custom-secure-auth'),
+                'icon' => 'dashicons-admin-users',
+            ),
             'email_templates' => array(
                 'title' => __('Email Templates', 'custom-secure-auth'),
                 'icon' => 'dashicons-email',
@@ -118,7 +122,7 @@ class CSA_Admin_Settings {
             ),
             'global_config' => array(
                 'token_expiry' => 30,
-                'redirect_after_login' => home_url(),
+                'redirect_after_login' => 0,
                 'disable_auto_login_after_reset' => false,
                 'button_css_classes' => 'btn btn-primary',
             ),
@@ -128,13 +132,40 @@ class CSA_Admin_Settings {
                 'lockout_duration' => 1,
                 'recaptcha_site_key' => '',
                 'recaptcha_secret_key' => '',
+                'disable_user_enumeration' => true,
+                'rest_api_authentication_required' => false,
+                'rest_api_whitelisted_namespaces' => array('custom-secure-auth'),
             ),
-            'grid_builder' => array(),
+            'grid_builder' => array(
+                'username_privacy_warning' => 'Privacy Tip: To keep your identity separate, we recommend using a username different from your real name or public social media handles.',
+            ),
             'emails' => array(
                 'activation_subject' => 'Activate Your Account - {site_name}',
                 'activation_template' => '<p>Hello {user_name},</p><p>Please click the link below to activate your account:</p><p><a href="{set_password_url}">Activate Account</a></p>',
                 'recovery_subject' => 'Reset Your Password - {site_name}',
                 'recovery_template' => '<p>Hello {user_name},</p><p>Please click the link below to reset your password:</p><p><a href="{set_password_url}">Reset Password</a></p>',
+            ),
+            'username_policy' => array(
+                'reserved_words' => array(
+                    'admin', 'administrator', 'root', 'system', 'server', 'bot', 'cron',
+                    'null', 'undefined', 'api', 'mod', 'moderator', 'staff', 'support',
+                    'help', 'official', 'owner', 'founder', 'verify', 'verification',
+                    'security', 'webmaster', 'sysadmin', 'superuser', 'editor'
+                ),
+                'reserved_words_boundary_match' => false,
+                'restricted_strict_enabled' => true,
+                'restricted_strict_words' => array(
+                    'nigger', 'nigga', 'kike', 'chink', 'spic', 'wetback', 'gook', 'towelhead',
+                    'faggot', 'dyke', 'tranny', 'fuck', 'shit', 'cunt', 'rape', 'rapist',
+                    'pedophile', 'pedo', 'molest', 'incest', 'nazi', 'hitler', 'kkk',
+                    'swastika', 'retard'
+                ),
+                'restricted_isolated_enabled' => true,
+                'restricted_isolated_words' => array(
+                    'ass', 'dick', 'cock', 'pussy', 'tit', 'tits', 'boob', 'boobs',
+                    'sex', 'xxx', 'porn', 'hentai', 'whore', 'slut', 'bitch',
+                    'bastard', 'damn', 'hell', 'piss', 'crap'
+                ),
             ),
         );
 
@@ -195,6 +226,10 @@ class CSA_Admin_Settings {
                 $settings = $this->save_grid_builder_settings($settings);
                 break;
 
+            case 'username_policy':
+                $settings = $this->save_username_policy_settings($settings);
+                break;
+
             case 'email_templates':
                 $settings = $this->save_email_templates_settings($settings);
                 break;
@@ -230,7 +265,7 @@ class CSA_Admin_Settings {
 
         // Global config
         $settings['global_config']['token_expiry'] = isset($_POST['token_expiry']) ? absint($_POST['token_expiry']) : 30;
-        $settings['global_config']['redirect_after_login'] = isset($_POST['redirect_after_login']) ? esc_url_raw($_POST['redirect_after_login']) : home_url();
+        $settings['global_config']['redirect_after_login'] = isset($_POST['redirect_after_login']) ? absint($_POST['redirect_after_login']) : 0;
         $settings['global_config']['disable_auto_login_after_reset'] = isset($_POST['disable_auto_login_after_reset']) ? true : false;
         $settings['global_config']['button_css_classes'] = isset($_POST['button_css_classes']) ? sanitize_text_field($_POST['button_css_classes']) : '';
 
@@ -249,6 +284,19 @@ class CSA_Admin_Settings {
         $settings['security']['lockout_duration'] = isset($_POST['lockout_duration']) ? absint($_POST['lockout_duration']) : 1;
         $settings['security']['recaptcha_site_key'] = isset($_POST['recaptcha_site_key']) ? sanitize_text_field($_POST['recaptcha_site_key']) : '';
         $settings['security']['recaptcha_secret_key'] = isset($_POST['recaptcha_secret_key']) ? sanitize_text_field($_POST['recaptcha_secret_key']) : '';
+
+        // REST API Security
+        $settings['security']['disable_user_enumeration'] = isset($_POST['disable_user_enumeration']) ? true : false;
+        $settings['security']['rest_api_authentication_required'] = isset($_POST['rest_api_authentication_required']) ? true : false;
+
+        // Whitelisted Namespaces (comma-delimited)
+        if (isset($_POST['rest_api_whitelisted_namespaces'])) {
+            $namespaces = sanitize_textarea_field($_POST['rest_api_whitelisted_namespaces']);
+            $namespaces_array = array_filter(array_map('trim', explode(',', $namespaces)));
+            // Remove duplicates and force lowercase
+            $namespaces_array = array_unique(array_map('strtolower', $namespaces_array));
+            $settings['security']['rest_api_whitelisted_namespaces'] = array_values($namespaces_array);
+        }
 
         return $settings;
     }
@@ -278,6 +326,7 @@ class CSA_Admin_Settings {
         $settings['grid_builder'] = array(
             'fields' => $grid_fields,
             'fun_username_enabled' => isset($_POST['fun_username_enabled']) ? true : false,
+            'username_privacy_warning' => isset($_POST['username_privacy_warning']) ? sanitize_text_field($_POST['username_privacy_warning']) : '',
         );
 
         return $settings;
@@ -294,6 +343,55 @@ class CSA_Admin_Settings {
         $settings['emails']['activation_template'] = isset($_POST['activation_template']) ? wp_kses_post($_POST['activation_template']) : '';
         $settings['emails']['recovery_subject'] = isset($_POST['recovery_subject']) ? sanitize_text_field($_POST['recovery_subject']) : '';
         $settings['emails']['recovery_template'] = isset($_POST['recovery_template']) ? wp_kses_post($_POST['recovery_template']) : '';
+
+        return $settings;
+    }
+
+    /**
+     * Save username policy settings
+     *
+     * @param array $settings Current settings
+     * @return array Updated settings
+     */
+    private function save_username_policy_settings($settings) {
+        // Initialize username_policy if not exists
+        if (!isset($settings['username_policy'])) {
+            $settings['username_policy'] = array();
+        }
+
+        // Save Reserved Words (always active)
+        if (isset($_POST['reserved_words'])) {
+            $reserved_words = sanitize_textarea_field($_POST['reserved_words']);
+            $reserved_words_array = array_filter(array_map('trim', explode(',', $reserved_words)));
+            // Force lowercase and remove duplicates
+            $reserved_words_array = array_unique(array_map('strtolower', $reserved_words_array));
+            $settings['username_policy']['reserved_words'] = array_values($reserved_words_array);
+        }
+
+        // Save Reserved Words boundary match toggle
+        $settings['username_policy']['reserved_words_boundary_match'] = isset($_POST['reserved_words_boundary_match']) ? true : false;
+
+        // Save Strict Block toggle and words
+        $settings['username_policy']['restricted_strict_enabled'] = isset($_POST['restricted_strict_enabled']) ? true : false;
+
+        if (isset($_POST['restricted_strict_words'])) {
+            $strict_words = sanitize_textarea_field($_POST['restricted_strict_words']);
+            $strict_words_array = array_filter(array_map('trim', explode(',', $strict_words)));
+            // Force lowercase and remove duplicates
+            $strict_words_array = array_unique(array_map('strtolower', $strict_words_array));
+            $settings['username_policy']['restricted_strict_words'] = array_values($strict_words_array);
+        }
+
+        // Save Isolated Block toggle and words
+        $settings['username_policy']['restricted_isolated_enabled'] = isset($_POST['restricted_isolated_enabled']) ? true : false;
+
+        if (isset($_POST['restricted_isolated_words'])) {
+            $isolated_words = sanitize_textarea_field($_POST['restricted_isolated_words']);
+            $isolated_words_array = array_filter(array_map('trim', explode(',', $isolated_words)));
+            // Force lowercase and remove duplicates
+            $isolated_words_array = array_unique(array_map('strtolower', $isolated_words_array));
+            $settings['username_policy']['restricted_isolated_words'] = array_values($isolated_words_array);
+        }
 
         return $settings;
     }
@@ -361,275 +459,6 @@ class CSA_Admin_Settings {
                 <?php submit_button(__('Save Settings', 'custom-secure-auth'), 'primary large'); ?>
             </form>
         </div>
-
-        <style>
-            .csa-settings-wrap {
-                max-width: 1200px;
-            }
-            .csa-nav-tab-wrapper {
-                /*margin-bottom: 20px;*/
-                /*border-bottom: 1px solid #ccc;*/
-            }
-            .csa-nav-tab {
-                display: inline-block;
-                padding: 10px 15px;
-                margin: 0 5px -1px 0;
-                border: 1px solid transparent;
-                text-decoration: none;
-                background: #f1f1f1;
-                color: #555;
-            }
-            .csa-nav-tab:hover {
-                background: #e8e8e8;
-                color: #000;
-            }
-            .csa-nav-tab.nav-tab-active {
-                border: 1px solid #ccc;
-                border-bottom-color: #fff!important;
-                background: #fff;
-                color: #000;
-            }
-            .csa-nav-tab .dashicons {
-                margin-right: 5px;
-            }
-            .csa-settings-form {
-                background: #fff;
-                padding: 20px;
-                /*border: 1px solid #ccc;*/
-                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            }
-            .csa-form-table {
-                width: 100%;
-                max-width: 800px;
-            }
-            .csa-form-table th {
-                width: 200px;
-                text-align: left;
-                padding: 15px 10px 15px 0;
-                vertical-align: top;
-                font-weight: 600;
-            }
-            .csa-form-table td {
-                padding: 15px 10px;
-            }
-            .csa-form-table .description {
-                display: block;
-                margin-top: 5px;
-                color: #666;
-                font-style: italic;
-            }
-            .csa-form-table input[type="text"],
-            .csa-form-table input[type="number"],
-            .csa-form-table input[type="password"],
-            .csa-form-table input[type="url"],
-            .csa-form-table select {
-                width: 100%;
-                max-width: 400px;
-            }
-            .csa-grid-builder {
-                margin-top: 20px;
-            }
-            .csa-grid-field {
-                background: #f9f9f9;
-                border: 1px solid #ddd;
-                padding: 15px;
-                margin-bottom: 10px;
-                position: relative;
-                cursor: move;
-            }
-            .csa-grid-field:hover {
-                background: #f5f5f5;
-            }
-            .csa-grid-field-handle {
-                display: inline-block;
-                width: 20px;
-                height: 20px;
-                background: #666;
-                color: #fff;
-                text-align: center;
-                line-height: 20px;
-                cursor: move;
-                margin-right: 10px;
-            }
-            .csa-grid-field-row {
-                display: flex;
-                gap: 10px;
-                margin-bottom: 10px;
-                align-items: center;
-            }
-            .csa-grid-field-row label {
-                min-width: 100px;
-                font-weight: 600;
-            }
-            .csa-grid-field-row input,
-            .csa-grid-field-row select {
-                flex: 1;
-            }
-            .csa-remove-field {
-                position: absolute;
-                top: 10px;
-                right: 10px;
-                color: #dc3232;
-                cursor: pointer;
-                text-decoration: none;
-            }
-            .csa-remove-field:hover {
-                color: #a00;
-            }
-            .csa-add-field {
-                margin-top: 10px;
-            }
-            .csa-placeholder-help {
-                background: #f0f6fc;
-                border-left: 4px solid #2271b1;
-                padding: 15px;
-                margin: 20px 0;
-            }
-            .csa-placeholder-help h4 {
-                margin-top: 0;
-            }
-            .csa-placeholder-help code {
-                background: #fff;
-                padding: 2px 6px;
-                border: 1px solid #ddd;
-                border-radius: 3px;
-            }
-            /* Grid Builder Redesign Styles */
-            .csa-info-box {
-                background: #e7f3ff;
-                border-left: 4px solid #0073aa;
-                padding: 20px;
-                margin: 20px 0;
-                border-radius: 4px;
-            }
-            .csa-info-box h3 {
-                margin-top: 0;
-                color: #0073aa;
-            }
-            .csa-info-box ul {
-                margin: 15px 0 0 20px;
-            }
-            .csa-info-box li {
-                margin-bottom: 10px;
-            }
-            .csa-quick-start {
-                background: #fff;
-                border: 1px solid #ddd;
-                padding: 20px;
-                margin: 20px 0;
-                border-radius: 4px;
-            }
-            .csa-quick-start h3 {
-                margin-top: 0;
-                color: #f6b027;
-            }
-            .csa-preset-buttons {
-                display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-                gap: 15px;
-                margin-top: 15px;
-            }
-            .csa-preset-btn {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                gap: 8px;
-                padding: 20px 15px;
-                background: #f8f9fa;
-                border: 2px solid #ddd;
-                border-radius: 6px;
-                cursor: pointer;
-                transition: all 0.2s ease;
-                text-align: center;
-            }
-            .csa-preset-btn:hover {
-                background: #0073aa;
-                color: #fff;
-                border-color: #0073aa;
-                transform: translateY(-2px);
-                box-shadow: 0 4px 8px rgba(0,115,170,0.2);
-            }
-            .csa-preset-btn .dashicons {
-                font-size: 32px;
-                width: 32px;
-                height: 32px;
-            }
-            .csa-empty-state {
-                background: #f9f9f9;
-                border: 2px dashed #ddd;
-                padding: 40px 20px;
-                text-align: center;
-                margin: 20px 0;
-                border-radius: 8px;
-            }
-            .csa-empty-state .dashicons {
-                font-size: 64px;
-                width: 64px;
-                height: 64px;
-                color: #ccc;
-            }
-            .csa-empty-state h4 {
-                margin: 15px 0 10px 0;
-                color: #666;
-            }
-            .csa-empty-state p {
-                color: #999;
-                max-width: 600px;
-                margin: 0 auto;
-            }
-            .csa-field-tooltip {
-                color: #0073aa;
-                cursor: help;
-                margin-left: 5px;
-            }
-            .csa-field-tooltip .dashicons {
-                font-size: 16px;
-                width: 16px;
-                height: 16px;
-                vertical-align: middle;
-            }
-            .csa-field-help {
-                display: block;
-                margin-top: 5px;
-                font-size: 12px;
-                color: #666;
-                font-style: italic;
-            }
-            .csa-checkbox-label {
-                display: flex;
-                align-items: center;
-                gap: 8px;
-            }
-            .csa-grid-field-row {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-            .csa-grid-field-row label {
-                min-width: auto;
-                width: 100%;
-                display: flex;
-                align-items: center;
-            }
-            .csa-grid-field-row input,
-            .csa-grid-field-row select {
-                width: 100%;
-            }
-            .csa-grid-field-placeholder {
-                background: #fafafa;
-                border: 2px dashed #ddd;
-                height: 60px;
-            }
-            @media (max-width: 782px) {
-                .csa-preset-buttons {
-                    grid-template-columns: repeat(2, 1fr);
-                }
-            }
-            @media (max-width: 480px) {
-                .csa-preset-buttons {
-                    grid-template-columns: 1fr;
-                }
-            }
-        </style>
         <?php
     }
 
@@ -769,14 +598,16 @@ class CSA_Admin_Settings {
                         <label for="redirect_after_login"><?php esc_html_e('Redirect After Login', 'custom-secure-auth'); ?></label>
                     </th>
                     <td>
-                        <input
-                            type="url"
-                            name="redirect_after_login"
-                            id="redirect_after_login"
-                            value="<?php echo esc_url($settings['global_config']['redirect_after_login']); ?>"
-                            placeholder="<?php echo esc_url(home_url()); ?>"
-                        >
-                        <span class="description"><?php esc_html_e('URL to redirect users after successful login.', 'custom-secure-auth'); ?></span>
+                        <?php
+                        wp_dropdown_pages(array(
+                            'name' => 'redirect_after_login',
+                            'id' => 'redirect_after_login',
+                            'selected' => $settings['global_config']['redirect_after_login'],
+                            'show_option_none' => __('— Home Page —', 'custom-secure-auth'),
+                            'option_none_value' => '0',
+                        ));
+                        ?>
+                        <span class="description"><?php esc_html_e('Select the page to redirect users after successful login. Leave as "Home Page" to use the site homepage.', 'custom-secure-auth'); ?></span>
                     </td>
                 </tr>
 
@@ -925,6 +756,341 @@ class CSA_Admin_Settings {
                 </tr>
             </tbody>
         </table>
+
+        <!-- REST API Security Section -->
+        <h2><?php esc_html_e('REST API Security', 'custom-secure-auth'); ?></h2>
+        <p><?php esc_html_e('Control public access to WordPress REST API endpoints. These settings help prevent user enumeration and unauthorized API access.', 'custom-secure-auth'); ?></p>
+
+        <table class="form-table csa-form-table">
+            <tbody>
+                <tr>
+                    <th scope="row">
+                        <label for="disable_user_enumeration"><?php esc_html_e('Disable User Enumeration', 'custom-secure-auth'); ?></label>
+                    </th>
+                    <td>
+                        <label>
+                            <input
+                                type="checkbox"
+                                name="disable_user_enumeration"
+                                id="disable_user_enumeration"
+                                value="1"
+                                <?php checked($settings['security']['disable_user_enumeration'], true); ?>
+                            >
+                            <?php esc_html_e('Block /wp/v2/users endpoints', 'custom-secure-auth'); ?>
+                        </label>
+                        <span class="description"><?php esc_html_e('Prevents attackers from discovering admin usernames via REST API. Recommended: Always enabled.', 'custom-secure-auth'); ?></span>
+                    </td>
+                </tr>
+
+                <tr>
+                    <th scope="row">
+                        <label for="rest_api_authentication_required"><?php esc_html_e('Require Authentication', 'custom-secure-auth'); ?></label>
+                    </th>
+                    <td>
+                        <label>
+                            <input
+                                type="checkbox"
+                                name="rest_api_authentication_required"
+                                id="rest_api_authentication_required"
+                                value="1"
+                                <?php checked($settings['security']['rest_api_authentication_required'], true); ?>
+                            >
+                            <?php esc_html_e('Require login for REST API access', 'custom-secure-auth'); ?>
+                        </label>
+                        <span class="description">
+                            <strong style="color: #d63638;"><?php esc_html_e('⚠️ Warning:', 'custom-secure-auth'); ?></strong>
+                            <?php esc_html_e('May break plugins/themes that use REST API for public features. Test thoroughly before enabling on production.', 'custom-secure-auth'); ?>
+                        </span>
+                    </td>
+                </tr>
+
+                <tr>
+                    <th scope="row">
+                        <label for="rest_api_whitelisted_namespaces"><?php esc_html_e('Whitelisted Namespaces', 'custom-secure-auth'); ?></label>
+                    </th>
+                    <td>
+                        <?php
+                        $namespaces = isset($settings['security']['rest_api_whitelisted_namespaces'])
+                            ? $settings['security']['rest_api_whitelisted_namespaces']
+                            : array();
+                        ?>
+                        <div class="csa-tag-input-wrapper" data-field-name="rest_api_whitelisted_namespaces">
+                            <div class="csa-tag-display"></div>
+                            <div class="csa-tag-input-row">
+                                <input type="text" class="csa-tag-input" placeholder="Type namespace and press Enter or click Add" aria-label="Add REST API namespace">
+                                <button type="button" class="button csa-tag-add-btn"><?php esc_html_e('Add', 'custom-secure-auth'); ?></button>
+                            </div>
+                            <input type="hidden" name="rest_api_whitelisted_namespaces" id="rest_api_whitelisted_namespaces" value="<?php echo esc_attr(is_array($namespaces) ? implode(', ', $namespaces) : ''); ?>">
+                        </div>
+                        <span class="description">
+                            <?php esc_html_e('Add REST API namespaces one at a time that should remain publicly accessible. Example: custom-secure-auth, contact-form-7, wpgform, fluentform', 'custom-secure-auth'); ?>
+                            <br>
+                            <strong><?php esc_html_e('Important:', 'custom-secure-auth'); ?></strong>
+                            <?php esc_html_e('"custom-secure-auth" is included by default to ensure this plugin\'s registration and login features continue working. You can remove it if you want to disable public registration.', 'custom-secure-auth'); ?>
+                            <br>
+                            <strong><?php esc_html_e('Note:', 'custom-secure-auth'); ?></strong>
+                            <?php esc_html_e('This setting only applies when "Require Authentication" is enabled.', 'custom-secure-auth'); ?>
+                        </span>
+
+                        <?php
+                        // Display last 20 blocked namespaces for debugging
+                        $blocked_log = get_option('csa_blocked_namespaces_log', array());
+                        if (!empty($blocked_log)):
+                        ?>
+                            <div class="csa-blocked-log" style="margin-top: 20px; padding: 15px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
+                                <strong style="display: block; margin-bottom: 10px;">
+                                    <span class="dashicons dashicons-warning" style="color: #d63638;"></span>
+                                    <?php esc_html_e('Recent Blocked Attempts (Last 20):', 'custom-secure-auth'); ?>
+                                </strong>
+                                <div style="max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 12px;">
+                                    <table style="width: 100%; border-collapse: collapse;">
+                                        <thead>
+                                            <tr style="background: #fff; border-bottom: 2px solid #ddd;">
+                                                <th style="padding: 5px; text-align: left;"><?php esc_html_e('Time', 'custom-secure-auth'); ?></th>
+                                                <th style="padding: 5px; text-align: left;"><?php esc_html_e('Blocked Route', 'custom-secure-auth'); ?></th>
+                                                <th style="padding: 5px; text-align: left;"><?php esc_html_e('IP Address', 'custom-secure-auth'); ?></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php
+                                            // Reverse to show newest first
+                                            foreach (array_reverse($blocked_log) as $entry):
+                                            ?>
+                                                <tr style="border-bottom: 1px solid #eee;">
+                                                    <td style="padding: 5px;"><?php echo esc_html($entry['timestamp']); ?></td>
+                                                    <td style="padding: 5px; color: #d63638;"><strong><?php echo esc_html($entry['route']); ?></strong></td>
+                                                    <td style="padding: 5px;"><?php echo esc_html($entry['ip']); ?></td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <p style="margin: 10px 0 0 0; font-size: 11px; color: #666;">
+                                    <?php esc_html_e('These are REST API routes that were blocked because "Require Authentication" is enabled and they are not in the whitelist. If you see routes that should be allowed, add their namespace to the whitelist above.', 'custom-secure-auth'); ?>
+                                </p>
+                            </div>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <style>
+            /* Tag-Style Input Interface */
+            .csa-tag-input-wrapper {
+                max-width: 800px;
+            }
+            .csa-tag-display {
+                min-height: 50px;
+                padding: 10px;
+                background: #fff;
+                border: 1px solid #8c8f94;
+                border-radius: 4px;
+                margin-bottom: 10px;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                align-items: flex-start;
+            }
+            .csa-tag-display:empty::before {
+                content: 'No items added yet. Type below and press Enter or click Add.';
+                color: #999;
+                font-style: italic;
+                font-size: 13px;
+            }
+            .csa-tag {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 5px 10px;
+                background: #2271b1;
+                color: #fff;
+                border-radius: 3px;
+                font-size: 13px;
+                line-height: 1.4;
+                transition: background 0.15s ease;
+            }
+            .csa-tag:hover {
+                background: #135e96;
+            }
+            .csa-tag-remove {
+                background: none;
+                border: none;
+                color: #fff;
+                cursor: pointer;
+                padding: 0;
+                margin: 0;
+                font-size: 16px;
+                line-height: 1;
+                opacity: 0.8;
+                transition: opacity 0.15s ease;
+            }
+            .csa-tag-remove:hover {
+                opacity: 1;
+            }
+            .csa-tag-input-row {
+                display: flex;
+                gap: 8px;
+                align-items: center;
+            }
+            .csa-tag-input {
+                flex: 1;
+                padding: 6px 10px;
+                border: 1px solid #8c8f94;
+                border-radius: 4px;
+                font-size: 14px;
+            }
+            .csa-tag-input:focus {
+                border-color: #2271b1;
+                outline: none;
+                box-shadow: 0 0 0 1px #2271b1;
+            }
+            .csa-tag-add-btn {
+                white-space: nowrap;
+            }
+        </style>
+
+        <script>
+        (function() {
+            // Only initialize if CSATagManager hasn't been defined yet
+            if (typeof window.CSATagManager !== 'undefined') {
+                return;
+            }
+
+            /**
+             * CSA Tag Manager - WordPress-style tag interface
+             */
+            window.CSATagManager = class CSATagManager {
+                constructor(wrapperElement) {
+                    this.wrapper = wrapperElement;
+                    this.display = this.wrapper.querySelector('.csa-tag-display');
+                    this.input = this.wrapper.querySelector('.csa-tag-input');
+                    this.addButton = this.wrapper.querySelector('.csa-tag-add-btn');
+                    this.hiddenInput = this.wrapper.querySelector('input[type="hidden"]');
+                    this.tags = new Set();
+
+                    this.init();
+                }
+
+                init() {
+                    this.loadExistingTags();
+                    this.addButton.addEventListener('click', () => this.handleAdd());
+                    this.input.addEventListener('keypress', (e) => this.handleKeyPress(e));
+                    this.display.addEventListener('click', (e) => this.handleRemove(e));
+                }
+
+                loadExistingTags() {
+                    const value = this.hiddenInput.value.trim();
+                    if (value) {
+                        const items = value.split(',').map(item => item.trim()).filter(item => item);
+                        items.forEach(item => this.tags.add(item.toLowerCase()));
+                    }
+                    this.render();
+                }
+
+                handleAdd() {
+                    const value = this.input.value.trim();
+                    if (value) {
+                        this.addTag(value);
+                        this.input.value = '';
+                        this.input.focus();
+                    }
+                }
+
+                handleKeyPress(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        this.handleAdd();
+                    }
+                }
+
+                handleRemove(e) {
+                    if (e.target.classList.contains('csa-tag-remove')) {
+                        const tag = e.target.closest('.csa-tag').dataset.value;
+                        this.removeTag(tag);
+                    }
+                }
+
+                addTag(value) {
+                    const normalized = value.toLowerCase().trim();
+                    if (!normalized) return false;
+
+                    if (this.tags.has(normalized)) {
+                        const existingTag = this.display.querySelector(`[data-value="${normalized}"]`);
+                        if (existingTag) {
+                            existingTag.style.animation = 'none';
+                            setTimeout(() => {
+                                existingTag.style.animation = 'csaFlash 0.5s ease';
+                            }, 10);
+                        }
+                        return false;
+                    }
+
+                    this.tags.add(normalized);
+                    this.render();
+                    this.updateHiddenInput();
+                    return true;
+                }
+
+                removeTag(value) {
+                    this.tags.delete(value);
+                    this.render();
+                    this.updateHiddenInput();
+                }
+
+                render() {
+                    this.display.innerHTML = '';
+                    const sortedTags = Array.from(this.tags).sort();
+
+                    sortedTags.forEach(tag => {
+                        const tagElement = document.createElement('span');
+                        tagElement.className = 'csa-tag';
+                        tagElement.dataset.value = tag;
+
+                        const text = document.createElement('span');
+                        text.textContent = tag;
+
+                        const removeBtn = document.createElement('button');
+                        removeBtn.type = 'button';
+                        removeBtn.className = 'csa-tag-remove';
+                        removeBtn.innerHTML = '&times;';
+                        removeBtn.setAttribute('aria-label', 'Remove ' + tag);
+
+                        tagElement.appendChild(text);
+                        tagElement.appendChild(removeBtn);
+                        this.display.appendChild(tagElement);
+                    });
+                }
+
+                updateHiddenInput() {
+                    const sortedTags = Array.from(this.tags).sort();
+                    this.hiddenInput.value = sortedTags.join(', ');
+                }
+            };
+
+            // Initialize tag managers
+            document.addEventListener('DOMContentLoaded', function() {
+                const wrappers = document.querySelectorAll('.csa-tag-input-wrapper');
+                wrappers.forEach(wrapper => {
+                    new window.CSATagManager(wrapper);
+                });
+            });
+
+            // Add flash animation
+            if (!document.getElementById('csa-flash-animation')) {
+                const style = document.createElement('style');
+                style.id = 'csa-flash-animation';
+                style.textContent = `
+                    @keyframes csaFlash {
+                        0%, 100% { transform: scale(1); }
+                        50% { transform: scale(1.1); background: #135e96; }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+        })();
+        </script>
+
         <?php
     }
 
@@ -958,6 +1124,25 @@ class CSA_Admin_Settings {
                 </label>
                 <p class="description" style="margin: 10px 0 0 34px;">
                     <?php esc_html_e('Auto-generates a fun username (like "Sassy_Clanker42") in the username field on page load. A refresh icon appears next to the label, allowing users to generate new options until they find one they like, or they can type their own.', 'custom-secure-auth'); ?>
+                </p>
+            </div>
+
+            <!-- Username Privacy Warning -->
+            <div class="csa-feature-toggle" style="background: #fff; border: 1px solid #ddd; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+                <label for="username_privacy_warning" style="display: block; font-weight: 600; margin-bottom: 10px;">
+                    <?php esc_html_e('Username Privacy Warning', 'custom-secure-auth'); ?>
+                </label>
+                <input
+                    type="text"
+                    name="username_privacy_warning"
+                    id="username_privacy_warning"
+                    class="regular-text"
+                    style="width: 100%; max-width: 600px;"
+                    value="<?php echo esc_attr($settings['grid_builder']['username_privacy_warning'] ?? ''); ?>"
+                    placeholder="<?php esc_attr_e('Enter a privacy tip for users...', 'custom-secure-auth'); ?>"
+                >
+                <p class="description" style="margin: 10px 0 0 0;">
+                    <?php esc_html_e('This warning appears below the username field on the registration form. Leave blank to disable the warning.', 'custom-secure-auth'); ?>
                 </p>
             </div>
 
@@ -1796,6 +1981,545 @@ class CSA_Admin_Settings {
                 transform: translateY(-1px);
             }
         </style>
+        <?php
+    }
+
+    /**
+     * Render Username Policy tab
+     *
+     * @param array $settings Current settings
+     */
+    private function render_username_policy_tab($settings) {
+        $policy = isset($settings['username_policy']) ? $settings['username_policy'] : array();
+
+        // Get word lists and settings
+        $reserved_words = isset($policy['reserved_words']) ? $policy['reserved_words'] : array();
+        $reserved_words_boundary_match = isset($policy['reserved_words_boundary_match']) ? $policy['reserved_words_boundary_match'] : false;
+        $restricted_strict_enabled = isset($policy['restricted_strict_enabled']) ? $policy['restricted_strict_enabled'] : true;
+        $restricted_strict_words = isset($policy['restricted_strict_words']) ? $policy['restricted_strict_words'] : array();
+        $restricted_isolated_enabled = isset($policy['restricted_isolated_enabled']) ? $policy['restricted_isolated_enabled'] : true;
+        $restricted_isolated_words = isset($policy['restricted_isolated_words']) ? $policy['restricted_isolated_words'] : array();
+        ?>
+
+        <div class="csa-username-policy-wrap">
+            <!-- Info Box -->
+            <div class="csa-info-box">
+                <h3><span class="dashicons dashicons-admin-users"></span> <?php esc_html_e('Username Policy Management', 'custom-secure-auth'); ?></h3>
+                <p><?php esc_html_e('Configure username validation rules and manage restricted words. These settings ensure usernames are appropriate and prevent system conflicts.', 'custom-secure-auth'); ?></p>
+            </div>
+
+            <!-- Section 1: Format Rules (Read-only) -->
+            <div class="csa-policy-section">
+                <h3><?php esc_html_e('Format Rules', 'custom-secure-auth'); ?></h3>
+                <p><?php esc_html_e('The following format rules are always enforced:', 'custom-secure-auth'); ?></p>
+                <ul class="csa-format-rules">
+                    <li><strong><?php esc_html_e('Length:', 'custom-secure-auth'); ?></strong> <?php esc_html_e('6-24 characters', 'custom-secure-auth'); ?></li>
+                    <li><strong><?php esc_html_e('Allowed characters:', 'custom-secure-auth'); ?></strong> <?php esc_html_e('Letters (a-z), numbers (0-9), underscores (_), hyphens (-)', 'custom-secure-auth'); ?></li>
+                    <li><strong><?php esc_html_e('Automatically converted to lowercase', 'custom-secure-auth'); ?></strong></li>
+                    <li><strong><?php esc_html_e('No purely numeric usernames', 'custom-secure-auth'); ?></strong> <?php esc_html_e('(e.g., "123456" is blocked)', 'custom-secure-auth'); ?></li>
+                    <li><strong><?php esc_html_e('No email addresses', 'custom-secure-auth'); ?></strong> <?php esc_html_e('(@ symbol detection)', 'custom-secure-auth'); ?></li>
+                </ul>
+            </div>
+
+            <!-- Section 2: Reserved Words (Always Active) -->
+            <div class="csa-policy-section">
+                <h3><?php esc_html_e('Reserved Words', 'custom-secure-auth'); ?></h3>
+                <label class="csa-toggle-label" style="margin-top: 15px;">
+                    <input
+                        type="checkbox"
+                        name="reserved_words_boundary_match"
+                        id="reserved_words_boundary_match"
+                        value="1"
+                        <?php checked($reserved_words_boundary_match, true); ?>
+                    >
+                    <strong><?php esc_html_e('Enable Word Boundary Matching', 'custom-secure-auth'); ?></strong>
+                </label>
+                <p class="description" style="margin-left: 26px;">
+                    <?php esc_html_e('When enabled, reserved words are blocked even with numbers/text before or after (e.g., "admin123", "879878464_admin"). When disabled, only exact matches are blocked (e.g., only "admin").', 'custom-secure-auth'); ?>
+                </p>
+
+                <p class="csa-matching-logic">
+                    <span class="dashicons dashicons-info"></span>
+                    <strong><?php esc_html_e('Matching Logic:', 'custom-secure-auth'); ?></strong>
+                    <br>
+                    <strong><?php esc_html_e('Exact Match Only (Unchecked):', 'custom-secure-auth'); ?></strong>
+                    <em><?php esc_html_e('If "admin" is in the list, only "admin" is blocked. "admin123" and "879878464_admin" are allowed.', 'custom-secure-auth'); ?></em>
+                    <br>
+                    <strong><?php esc_html_e('Word Boundary Match (Checked):', 'custom-secure-auth'); ?></strong>
+                    <em><?php esc_html_e('If "admin" is in the list, "admin", "admin123", "879878464_admin", and "_admin_" are all blocked, but "administrator" is allowed.', 'custom-secure-auth'); ?></em>
+                </p>
+
+                <p><?php esc_html_e('These words are reserved for system use and cannot be used as usernames (always active).', 'custom-secure-auth'); ?></p>
+
+                <label for="reserved_words"><?php esc_html_e('Reserved Words:', 'custom-secure-auth'); ?></label>
+                <div class="csa-tag-input-wrapper" data-field-name="reserved_words">
+                    <div class="csa-tag-display"></div>
+                    <div class="csa-tag-input-row">
+                        <input type="text" class="csa-tag-input" placeholder="Type word and press Enter or click Add" aria-label="Add reserved word">
+                        <button type="button" class="button csa-tag-add-btn"><?php esc_html_e('Add', 'custom-secure-auth'); ?></button>
+                        <button type="button" class="button button-secondary csa-reset-defaults" data-default-words="admin, administrator, root, system, server, bot, cron, null, undefined, api, mod, moderator, staff, support, help, official, owner, founder, verify, verification, security, webmaster, sysadmin, superuser, editor"><?php esc_html_e('Reset to Defaults', 'custom-secure-auth'); ?></button>
+                    </div>
+                    <input type="hidden" name="reserved_words" id="reserved_words" value="<?php echo esc_attr(implode(', ', $reserved_words)); ?>">
+                </div>
+                <p class="description">
+                    <?php esc_html_e('Add words one at a time. Words will be automatically converted to lowercase. Click the × to remove.', 'custom-secure-auth'); ?>
+                </p>
+
+            </div>
+
+            <!-- Section 3: Strict Block (Substring Match) -->
+            <div class="csa-policy-section">
+                <h3><?php esc_html_e('Restricted Words - Tier 1: Strict Block', 'custom-secure-auth'); ?></h3>
+
+                <label class="csa-toggle-label">
+                    <input
+                        type="checkbox"
+                        name="restricted_strict_enabled"
+                        id="restricted_strict_enabled"
+                        value="1"
+                        <?php checked($restricted_strict_enabled, true); ?>
+                    >
+                    <strong><?php esc_html_e('Enable Strict Block Filter', 'custom-secure-auth'); ?></strong>
+                </label>
+                <p class="description">
+                    <?php esc_html_e('Block usernames containing offensive words anywhere in the username (substring match).', 'custom-secure-auth'); ?>
+                </p>
+
+                <p class="csa-matching-logic">
+                    <span class="dashicons dashicons-info"></span>
+                    <strong><?php esc_html_e('Matching Logic:', 'custom-secure-auth'); ?></strong>
+                    <?php esc_html_e('Substring match - blocked if the word appears anywhere in the username.', 'custom-secure-auth'); ?>
+                    <br>
+                    <em><?php esc_html_e('Example: If "spam" is in the list, both "spam" and "spammer123" are blocked.', 'custom-secure-auth'); ?></em>
+                </p>
+
+                <details class="csa-collapsible-section">
+                    <summary class="csa-warning-summary">
+                        <span class="dashicons dashicons-warning"></span>
+                        <?php esc_html_e('⚠️ Click to view/edit restricted words (contains offensive content)', 'custom-secure-auth'); ?>
+                    </summary>
+                    <div class="csa-restricted-content">
+                        <label for="restricted_strict_words"><?php esc_html_e('Strict Block Words:', 'custom-secure-auth'); ?></label>
+                        <div class="csa-tag-input-wrapper" data-field-name="restricted_strict_words">
+                            <div class="csa-tag-display"></div>
+                            <div class="csa-tag-input-row">
+                                <input type="text" class="csa-tag-input" placeholder="Type word and press Enter or click Add" aria-label="Add strict block word">
+                                <button type="button" class="button csa-tag-add-btn"><?php esc_html_e('Add', 'custom-secure-auth'); ?></button>
+                                <button type="button" class="button button-secondary csa-reset-defaults" data-default-words="nigger, nigga, kike, chink, spic, wetback, gook, towelhead, faggot, dyke, tranny, fuck, shit, cunt, rape, rapist, pedophile, pedo, molest, incest, nazi, hitler, kkk, swastika, retard"><?php esc_html_e('Reset to Defaults', 'custom-secure-auth'); ?></button>
+                            </div>
+                            <input type="hidden" name="restricted_strict_words" id="restricted_strict_words" value="<?php echo esc_attr(implode(', ', $restricted_strict_words)); ?>">
+                        </div>
+                        <p class="description">
+                            <?php esc_html_e('Add words one at a time. Words that should NEVER appear anywhere in a username. These will be automatically converted to lowercase. Click the × to remove.', 'custom-secure-auth'); ?>
+                        </p>
+                    </div>
+                </details>
+            </div>
+
+            <!-- Section 4: Isolated Block (Word Boundary Match) -->
+            <div class="csa-policy-section">
+                <h3><?php esc_html_e('Restricted Words - Tier 2: Isolated Block', 'custom-secure-auth'); ?></h3>
+
+                <label class="csa-toggle-label">
+                    <input
+                        type="checkbox"
+                        name="restricted_isolated_enabled"
+                        id="restricted_isolated_enabled"
+                        value="1"
+                        <?php checked($restricted_isolated_enabled, true); ?>
+                    >
+                    <strong><?php esc_html_e('Enable Isolated Block Filter', 'custom-secure-auth'); ?></strong>
+                </label>
+                <p class="description">
+                    <?php esc_html_e('Block usernames where inappropriate words appear as standalone words (word boundary match).', 'custom-secure-auth'); ?>
+                </p>
+
+                <p class="csa-matching-logic">
+                    <span class="dashicons dashicons-info"></span>
+                    <strong><?php esc_html_e('Matching Logic:', 'custom-secure-auth'); ?></strong>
+                    <?php esc_html_e('Word boundary match - blocked only when the word stands alone or is separated by underscores/hyphens.', 'custom-secure-auth'); ?>
+                    <br>
+                    <em><?php esc_html_e('Example: If "nazi" is in the list, "big_nazi" is blocked, but "denazification" is allowed.', 'custom-secure-auth'); ?></em>
+                </p>
+
+                <details class="csa-collapsible-section">
+                    <summary class="csa-warning-summary">
+                        <span class="dashicons dashicons-warning"></span>
+                        <?php esc_html_e('⚠️ Click to view/edit restricted words (contains offensive content)', 'custom-secure-auth'); ?>
+                    </summary>
+                    <div class="csa-restricted-content">
+                        <label for="restricted_isolated_words"><?php esc_html_e('Isolated Block Words:', 'custom-secure-auth'); ?></label>
+                        <div class="csa-tag-input-wrapper" data-field-name="restricted_isolated_words">
+                            <div class="csa-tag-display"></div>
+                            <div class="csa-tag-input-row">
+                                <input type="text" class="csa-tag-input" placeholder="Type word and press Enter or click Add" aria-label="Add isolated block word">
+                                <button type="button" class="button csa-tag-add-btn"><?php esc_html_e('Add', 'custom-secure-auth'); ?></button>
+                                <button type="button" class="button button-secondary csa-reset-defaults" data-default-words="ass, dick, cock, pussy, tit, tits, boob, boobs, sex, xxx, porn, hentai, whore, slut, bitch, bastard, damn, hell, piss, crap"><?php esc_html_e('Reset to Defaults', 'custom-secure-auth'); ?></button>
+                            </div>
+                            <input type="hidden" name="restricted_isolated_words" id="restricted_isolated_words" value="<?php echo esc_attr(implode(', ', $restricted_isolated_words)); ?>">
+                        </div>
+                        <p class="description">
+                            <?php esc_html_e('Add words one at a time. Words blocked only when they appear as standalone words. These will be automatically converted to lowercase. Click the × to remove.', 'custom-secure-auth'); ?>
+                        </p>
+                    </div>
+                </details>
+            </div>
+        </div>
+
+        <style>
+            .csa-username-policy-wrap {
+                max-width: 900px;
+            }
+            .csa-info-box {
+                background: #e7f3ff;
+                border-left: 4px solid #0073aa;
+                padding: 15px 20px;
+                margin-bottom: 25px;
+            }
+            .csa-info-box h3 {
+                margin-top: 0;
+                color: #0073aa;
+            }
+            .csa-info-box .dashicons {
+                color: #0073aa;
+            }
+            .csa-policy-section {
+                background: #fff;
+                border: 1px solid #ddd;
+                padding: 20px;
+                margin-bottom: 20px;
+                border-radius: 4px;
+            }
+            .csa-policy-section h3 {
+                margin-top: 0;
+                border-bottom: 1px solid #ddd;
+                padding-bottom: 10px;
+            }
+            .csa-format-rules {
+                list-style: none;
+                padding: 0;
+                margin: 15px 0;
+            }
+            .csa-format-rules li {
+                padding: 8px 0;
+                border-bottom: 1px solid #f0f0f0;
+            }
+            .csa-format-rules li:last-child {
+                border-bottom: none;
+            }
+            .csa-matching-logic {
+                background: #f0f6fc;
+                border-left: 3px solid #0073aa;
+                padding: 12px 15px;
+                margin: 15px 0;
+            }
+            .csa-matching-logic .dashicons {
+                color: #0073aa;
+                vertical-align: text-top;
+            }
+            .csa-toggle-label {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                margin: 15px 0;
+                cursor: pointer;
+            }
+            .csa-toggle-label input[type="checkbox"] {
+                width: 18px;
+                height: 18px;
+            }
+            .csa-collapsible-section {
+                margin: 15px 0;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+            }
+            .csa-warning-summary {
+                background: #fff3cd;
+                border-bottom: 1px solid #ffc107;
+                padding: 12px 15px;
+                cursor: pointer;
+                font-weight: 600;
+                color: #856404;
+            }
+            .csa-warning-summary:hover {
+                background: #ffecb3;
+            }
+            .csa-warning-summary .dashicons {
+                color: #ffc107;
+                vertical-align: text-top;
+            }
+            .csa-restricted-content {
+                padding: 15px;
+                background: #fafafa;
+            }
+            .csa-username-policy-wrap textarea.large-text {
+                width: 100%;
+                font-family: 'Courier New', monospace;
+                font-size: 13px;
+            }
+            .csa-username-policy-wrap label {
+                display: block;
+                font-weight: 600;
+                margin-bottom: 8px;
+            }
+            .csa-username-policy-wrap .description {
+                margin-top: 8px;
+                color: #666;
+                font-style: italic;
+            }
+
+            /* Tag-Style Input Interface */
+            .csa-tag-input-wrapper {
+                max-width: 800px;
+            }
+            .csa-tag-display {
+                min-height: 50px;
+                padding: 10px;
+                background: #fff;
+                border: 1px solid #8c8f94;
+                border-radius: 4px;
+                margin-bottom: 10px;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                align-items: flex-start;
+            }
+            .csa-tag-display:empty::before {
+                content: 'No items added yet. Type below and press Enter or click Add.';
+                color: #999;
+                font-style: italic;
+                font-size: 13px;
+            }
+            .csa-tag {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 5px 10px;
+                background: #2271b1;
+                color: #fff;
+                border-radius: 3px;
+                font-size: 13px;
+                line-height: 1.4;
+                transition: background 0.15s ease;
+            }
+            .csa-tag:hover {
+                background: #135e96;
+            }
+            .csa-tag-remove {
+                background: none;
+                border: none;
+                color: #fff;
+                cursor: pointer;
+                padding: 0;
+                margin: 0;
+                font-size: 16px;
+                line-height: 1;
+                opacity: 0.8;
+                transition: opacity 0.15s ease;
+            }
+            .csa-tag-remove:hover {
+                opacity: 1;
+            }
+            .csa-tag-input-row {
+                display: flex;
+                gap: 8px;
+                align-items: center;
+            }
+            .csa-tag-input {
+                flex: 1;
+                padding: 6px 10px;
+                border: 1px solid #8c8f94;
+                border-radius: 4px;
+                font-size: 14px;
+            }
+            .csa-tag-input:focus {
+                border-color: #2271b1;
+                outline: none;
+                box-shadow: 0 0 0 1px #2271b1;
+            }
+            .csa-tag-add-btn {
+                white-space: nowrap;
+            }
+            .csa-reset-defaults {
+                white-space: nowrap;
+                margin-left: auto;
+            }
+        </style>
+
+        <script>
+        /**
+         * CSA Tag Manager - WordPress-style tag interface
+         */
+        class CSATagManager {
+            constructor(wrapperElement) {
+                this.wrapper = wrapperElement;
+                this.display = this.wrapper.querySelector('.csa-tag-display');
+                this.input = this.wrapper.querySelector('.csa-tag-input');
+                this.addButton = this.wrapper.querySelector('.csa-tag-add-btn');
+                this.hiddenInput = this.wrapper.querySelector('input[type="hidden"]');
+                this.tags = new Set();
+
+                this.init();
+            }
+
+            init() {
+                // Load existing tags from hidden input
+                this.loadExistingTags();
+
+                // Bind events
+                this.addButton.addEventListener('click', () => this.handleAdd());
+                this.input.addEventListener('keypress', (e) => this.handleKeyPress(e));
+                this.display.addEventListener('click', (e) => this.handleRemove(e));
+            }
+
+            loadExistingTags() {
+                const value = this.hiddenInput.value.trim();
+                if (value) {
+                    const items = value.split(',').map(item => item.trim()).filter(item => item);
+                    items.forEach(item => this.tags.add(item.toLowerCase()));
+                }
+                this.render();
+            }
+
+            handleAdd() {
+                const value = this.input.value.trim();
+                if (value) {
+                    this.addTag(value);
+                    this.input.value = '';
+                    this.input.focus();
+                }
+            }
+
+            handleKeyPress(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.handleAdd();
+                }
+            }
+
+            handleRemove(e) {
+                if (e.target.classList.contains('csa-tag-remove')) {
+                    const tag = e.target.closest('.csa-tag').dataset.value;
+                    this.removeTag(tag);
+                }
+            }
+
+            addTag(value) {
+                const normalized = value.toLowerCase().trim();
+
+                if (!normalized) {
+                    return false;
+                }
+
+                if (this.tags.has(normalized)) {
+                    // Flash the existing tag to show it's already there
+                    const existingTag = this.display.querySelector(`[data-value="${normalized}"]`);
+                    if (existingTag) {
+                        existingTag.style.animation = 'none';
+                        setTimeout(() => {
+                            existingTag.style.animation = 'csaFlash 0.5s ease';
+                        }, 10);
+                    }
+                    return false;
+                }
+
+                this.tags.add(normalized);
+                this.render();
+                this.updateHiddenInput();
+                return true;
+            }
+
+            removeTag(value) {
+                this.tags.delete(value);
+                this.render();
+                this.updateHiddenInput();
+            }
+
+            render() {
+                this.display.innerHTML = '';
+
+                const sortedTags = Array.from(this.tags).sort();
+
+                sortedTags.forEach(tag => {
+                    const tagElement = document.createElement('span');
+                    tagElement.className = 'csa-tag';
+                    tagElement.dataset.value = tag;
+
+                    const text = document.createElement('span');
+                    text.textContent = tag;
+
+                    const removeBtn = document.createElement('button');
+                    removeBtn.type = 'button';
+                    removeBtn.className = 'csa-tag-remove';
+                    removeBtn.innerHTML = '&times;';
+                    removeBtn.setAttribute('aria-label', 'Remove ' + tag);
+
+                    tagElement.appendChild(text);
+                    tagElement.appendChild(removeBtn);
+                    this.display.appendChild(tagElement);
+                });
+            }
+
+            updateHiddenInput() {
+                const sortedTags = Array.from(this.tags).sort();
+                this.hiddenInput.value = sortedTags.join(', ');
+            }
+        }
+
+        // Initialize all tag managers when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            const wrappers = document.querySelectorAll('.csa-tag-input-wrapper');
+            const managers = new Map();
+
+            wrappers.forEach(wrapper => {
+                const manager = new CSATagManager(wrapper);
+                const fieldName = wrapper.dataset.fieldName;
+                managers.set(fieldName, manager);
+            });
+
+            // Handle "Reset to Defaults" buttons
+            document.querySelectorAll('.csa-reset-defaults').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    if (!confirm('Reset to default word list? This will replace all current words.')) {
+                        return;
+                    }
+
+                    const wrapper = this.closest('.csa-tag-input-wrapper');
+                    const fieldName = wrapper.dataset.fieldName;
+                    const manager = managers.get(fieldName);
+                    const defaultWords = this.dataset.defaultWords;
+
+                    if (manager && defaultWords) {
+                        // Clear existing tags
+                        manager.tags.clear();
+
+                        // Add default words
+                        const words = defaultWords.split(',').map(w => w.trim());
+                        words.forEach(word => {
+                            if (word) {
+                                manager.tags.add(word.toLowerCase());
+                            }
+                        });
+
+                        // Re-render and update hidden input
+                        manager.render();
+                        manager.updateHiddenInput();
+                    }
+                });
+            });
+        });
+
+        // Add flash animation for duplicates
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes csaFlash {
+                0%, 100% { transform: scale(1); }
+                50% { transform: scale(1.1); background: #135e96; }
+            }
+        `;
+        document.head.appendChild(style);
+        </script>
+
         <?php
     }
 }

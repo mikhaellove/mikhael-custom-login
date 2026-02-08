@@ -227,11 +227,18 @@ class CSA_Shortcodes {
                     </button>
                 </div>
 
-                <?php if ($this->is_page_mapped('lost_password_page')): ?>
+                <?php if ($this->is_page_mapped('lost_password_page') || $this->is_page_mapped('register_page')): ?>
                 <div class="csa-form-links">
+                    <?php if ($this->is_page_mapped('lost_password_page')): ?>
                     <a href="<?php echo esc_url($this->get_page_url('lost_password_page')); ?>">
                         <?php esc_html_e('Lost your password?', 'custom-secure-auth'); ?>
                     </a>
+                    <?php endif; ?>
+                    <?php if ($this->is_page_mapped('register_page')): ?>
+                    <a href="<?php echo esc_url($this->get_page_url('register_page')); ?>">
+                        <?php esc_html_e('Create an account', 'custom-secure-auth'); ?>
+                    </a>
+                    <?php endif; ?>
                 </div>
                 <?php endif; ?>
             </form>
@@ -355,7 +362,7 @@ class CSA_Shortcodes {
                                         <span class="csa-required">*</span>
                                     <?php endif; ?>
                                     <?php if ($fun_username_enabled && $field_id === 'user_login'): ?>
-                                        <span class="csa-username-refresh" title="<?php esc_attr_e('Generate new username', 'custom-secure-auth'); ?>" style="cursor: pointer; margin-left: 8px;">↻</span>
+                                        <span class="csa-username-refresh" title="<?php esc_attr_e('Generate new username', 'custom-secure-auth'); ?>">↻</span>
                                     <?php endif; ?>
                                 </label>
                                 <input

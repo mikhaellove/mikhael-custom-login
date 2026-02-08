@@ -14,7 +14,8 @@
          * Initialize on document ready
          */
         init: function() {
-            this.initTabs();
+            // Don't init tabs - PHP uses server-side tab navigation
+            // this.initTabs();
             this.initGridBuilder();
             this.initFormValidation();
             this.initCodeCopy();
@@ -81,239 +82,150 @@
          * Initialize grid builder functionality
          */
         initGridBuilder: function() {
-            // Initialize sortable for existing fields
-            this.initSortable();
+            // Check if we have Grid Builder data
+            if (typeof csaGridBuilder === 'undefined') {
+                return;
+            }
 
-            // Add field button
-            $(document).on('click', '.csa-add-field-btn', this.addGridField.bind(this));
+            // Initialize field index
+            this.fieldIndex = csaGridBuilder.fieldIndex || 0;
+            this.presets = csaGridBuilder.presets || {};
+            this.i18n = csaGridBuilder.i18n || {};
+
+            // Make fields sortable
+            $('#csa-grid-fields-container').sortable({
+                handle: '.csa-grid-field-handle',
+                placeholder: 'csa-grid-field-placeholder',
+                cursor: 'move',
+                opacity: 0.8
+            });
+
+            // Add preset field
+            $(document).on('click', '.csa-preset-btn', this.addPresetField.bind(this));
+
+            // Add custom field
+            $(document).on('click', '#csa-add-field', this.addCustomField.bind(this));
 
             // Remove field button
-            $(document).on('click', '.csa-remove-field', this.removeGridField.bind(this));
+            $(document).on('click', '.csa-remove-field', this.removeGridBuilderField.bind(this));
 
-            // Auto-generate field ID from label
-            $(document).on('blur', '.csa-field-label-input', this.autoGenerateFieldId.bind(this));
+            // Auto-generate ID from label
+            $(document).on('blur', '.csa-grid-field-label', this.autoGenerateGridFieldId.bind(this));
 
-            // Update field title on label change
-            $(document).on('input', '.csa-field-label-input', this.updateFieldTitle.bind(this));
+            // Update help text when field type changes
+            $(document).on('change', '.csa-grid-field-type', this.updateFieldTypeHelp.bind(this));
 
-            // Renumber fields on change
-            this.renumberFields();
+            // Initialize empty state
+            this.updateEmptyState();
         },
 
         /**
-         * Initialize jQuery UI Sortable
+         * Update empty state visibility
          */
-        initSortable: function() {
-            $('.csa-grid-fields').sortable({
-                handle: '.csa-drag-handle',
-                placeholder: 'csa-grid-field-placeholder',
-                axis: 'y',
-                opacity: 0.7,
-                cursor: 'move',
-                tolerance: 'pointer',
-                update: function(event, ui) {
-                    CSA_Admin.renumberFields();
-                }
-            });
+        updateEmptyState: function() {
+            const fieldCount = $('#csa-grid-fields-container .csa-grid-field').length;
+            if (fieldCount > 0) {
+                $('.csa-empty-state').hide();
+            } else {
+                $('.csa-empty-state').show();
+            }
         },
 
         /**
-         * Add new grid field
+         * Add preset field
          */
-        addGridField: function(e) {
+        addPresetField: function(e) {
             e.preventDefault();
 
             const $button = $(e.currentTarget);
-            const $container = $button.closest('.csa-grid-builder').find('.csa-grid-fields');
-            const fieldIndex = $container.find('.csa-grid-field-row').length;
-            const fieldType = $button.data('type') || 'login';
+            const presetName = $button.data('preset');
+            const preset = this.presets[presetName];
 
-            // Field template
-            const fieldHtml = this.getFieldTemplate(fieldType, fieldIndex);
+            if (!preset) return;
 
-            // Add to container
-            $container.append(fieldHtml);
+            const template = $('#csa-grid-field-template').html();
+            const newField = template.replace(/{{INDEX}}/g, this.fieldIndex);
+            $('#csa-grid-fields-container').append(newField);
 
-            // Renumber fields
-            this.renumberFields();
+            // Find the newly added field and populate it
+            const $newField = $('#csa-grid-fields-container .csa-grid-field').last();
+            $newField.find('.csa-grid-field-id').val(preset.id);
+            $newField.find('.csa-grid-field-label').val(preset.label);
+            $newField.find('.csa-grid-field-placeholder').val(preset.placeholder);
+            $newField.find('.csa-grid-field-type').val(preset.type);
+            $newField.find('.csa-grid-field-width').val(preset.width);
 
-            // Scroll to new field
-            const $newField = $container.find('.csa-grid-field-row').last();
+            if (preset.required) {
+                $newField.find('.csa-grid-field-required').prop('checked', true);
+            }
+
+            this.fieldIndex++;
+            this.updateEmptyState();
+
+            // Scroll to the new field
             $('html, body').animate({
                 scrollTop: $newField.offset().top - 100
-            }, 300);
-
-            // Focus first input
-            $newField.find('input').first().focus();
+            }, 500);
         },
 
         /**
-         * Get field template HTML
+         * Add custom field
          */
-        getFieldTemplate: function(fieldType, fieldIndex) {
-            const uniqueId = 'field_' + Date.now();
-
-            return `
-                <div class="csa-grid-field-row" data-field-index="${fieldIndex}">
-                    <div class="csa-grid-field-header">
-                        <span class="dashicons dashicons-menu csa-drag-handle" title="Drag to reorder"></span>
-                        <span class="csa-field-number">${fieldIndex + 1}</span>
-                        <span class="csa-field-title">New Field</span>
-                        <button type="button" class="csa-remove-field" title="Remove field">
-                            <span class="dashicons dashicons-no-alt"></span>
-                        </button>
-                    </div>
-                    <div class="csa-grid-field-body">
-                        <div class="csa-grid-field-control">
-                            <label>Field Label</label>
-                            <input type="text"
-                                   class="csa-field-label-input"
-                                   name="csa_${fieldType}_fields[${fieldIndex}][label]"
-                                   value=""
-                                   placeholder="e.g., Username">
-                        </div>
-                        <div class="csa-grid-field-control">
-                            <label>Field ID</label>
-                            <input type="text"
-                                   class="csa-field-id-input"
-                                   name="csa_${fieldType}_fields[${fieldIndex}][id]"
-                                   value="${uniqueId}"
-                                   placeholder="e.g., username">
-                        </div>
-                        <div class="csa-grid-field-control">
-                            <label>Field Type</label>
-                            <select name="csa_${fieldType}_fields[${fieldIndex}][type]">
-                                <option value="text">Text</option>
-                                <option value="email">Email</option>
-                                <option value="password">Password</option>
-                                <option value="tel">Phone</option>
-                                <option value="url">URL</option>
-                                <option value="number">Number</option>
-                                <option value="date">Date</option>
-                                <option value="select">Select Dropdown</option>
-                                <option value="checkbox">Checkbox</option>
-                                <option value="radio">Radio Buttons</option>
-                                <option value="textarea">Textarea</option>
-                            </select>
-                        </div>
-                        <div class="csa-grid-field-control">
-                            <label>Grid Width</label>
-                            <select name="csa_${fieldType}_fields[${fieldIndex}][width]">
-                                <option value="col-100" selected>Full Width (100%)</option>
-                                <option value="col-50">Half Width (50%)</option>
-                                <option value="col-33">Third Width (33%)</option>
-                            </select>
-                        </div>
-                        <div class="csa-grid-field-control full-width">
-                            <label>Placeholder Text</label>
-                            <input type="text"
-                                   name="csa_${fieldType}_fields[${fieldIndex}][placeholder]"
-                                   value=""
-                                   placeholder="Optional placeholder text">
-                        </div>
-                        <div class="csa-grid-field-control full-width">
-                            <label>
-                                <input type="checkbox"
-                                       name="csa_${fieldType}_fields[${fieldIndex}][required]"
-                                       value="1">
-                                Required field
-                            </label>
-                        </div>
-                    </div>
-                </div>
-            `;
-        },
-
-        /**
-         * Remove grid field
-         */
-        removeGridField: function(e) {
+        addCustomField: function(e) {
             e.preventDefault();
 
-            if (!confirm('Are you sure you want to remove this field?')) {
-                return;
-            }
-
-            const $field = $(e.currentTarget).closest('.csa-grid-field-row');
-
-            $field.fadeOut(300, function() {
-                $(this).remove();
-                CSA_Admin.renumberFields();
-            });
+            const template = $('#csa-grid-field-template').html();
+            const newField = template.replace(/{{INDEX}}/g, this.fieldIndex);
+            $('#csa-grid-fields-container').append(newField);
+            this.fieldIndex++;
+            this.updateEmptyState();
         },
 
         /**
-         * Auto-generate field ID from label
+         * Remove grid builder field
          */
-        autoGenerateFieldId: function(e) {
+        removeGridBuilderField: function(e) {
+            e.preventDefault();
+
+            const confirmMsg = this.i18n.confirmRemove || 'Are you sure you want to remove this field?';
+            if (confirm(confirmMsg)) {
+                $(e.currentTarget).closest('.csa-grid-field').remove();
+                this.updateEmptyState();
+            }
+        },
+
+        /**
+         * Auto-generate ID from label for grid builder
+         */
+        autoGenerateGridFieldId: function(e) {
             const $labelInput = $(e.currentTarget);
-            const $fieldRow = $labelInput.closest('.csa-grid-field-row');
-            const $idInput = $fieldRow.find('.csa-field-id-input');
+            const $field = $labelInput.closest('.csa-grid-field');
+            const $idInput = $field.find('.csa-grid-field-id');
 
-            // Only auto-generate if ID is empty or looks auto-generated
-            const currentId = $idInput.val();
-            if (currentId && !currentId.startsWith('field_')) {
-                return;
-            }
-
-            const label = $labelInput.val();
-            const fieldId = this.slugify(label);
-
-            if (fieldId) {
-                $idInput.val(fieldId);
+            // Only auto-generate if ID is empty
+            if ($idInput.val() === '') {
+                const label = $labelInput.val();
+                const id = label.toLowerCase()
+                    .replace(/[^a-z0-9]+/g, '_')
+                    .replace(/^_+|_+$/g, '');
+                $idInput.val(id);
             }
         },
 
         /**
-         * Update field title when label changes
+         * Update help text when field type changes
          */
-        updateFieldTitle: function(e) {
-            const $labelInput = $(e.currentTarget);
-            const $fieldRow = $labelInput.closest('.csa-grid-field-row');
-            const $title = $fieldRow.find('.csa-field-title');
-            const label = $labelInput.val();
+        updateFieldTypeHelp: function(e) {
+            const $select = $(e.currentTarget);
+            const $field = $select.closest('.csa-grid-field');
+            const selectedType = $select.val();
+            const $helpText = $field.find('.csa-field-type-help');
 
-            $title.text(label || 'New Field');
-        },
+            const helpTexts = this.i18n.helpTexts || {};
 
-        /**
-         * Renumber all fields
-         */
-        renumberFields: function() {
-            $('.csa-grid-fields').each(function() {
-                $(this).find('.csa-grid-field-row').each(function(index) {
-                    $(this)
-                        .attr('data-field-index', index)
-                        .find('.csa-field-number')
-                        .text(index + 1);
-
-                    // Update input names with correct index
-                    $(this).find('input, select').each(function() {
-                        const $input = $(this);
-                        const name = $input.attr('name');
-
-                        if (name) {
-                            const newName = name.replace(/\[\d+\]/, '[' + index + ']');
-                            $input.attr('name', newName);
-                        }
-                    });
-                });
-            });
-        },
-
-        /**
-         * Convert string to slug
-         */
-        slugify: function(text) {
-            return text
-                .toString()
-                .toLowerCase()
-                .trim()
-                .replace(/\s+/g, '_')           // Replace spaces with _
-                .replace(/[^\w\-]+/g, '')       // Remove non-word chars
-                .replace(/\_\_+/g, '_')         // Replace multiple _ with single _
-                .replace(/^-+/, '')             // Trim - from start
-                .replace(/-+$/, '');            // Trim - from end
+            if (helpTexts[selectedType]) {
+                $helpText.text(helpTexts[selectedType]);
+            }
         },
 
         /**

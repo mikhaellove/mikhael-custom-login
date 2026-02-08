@@ -211,12 +211,14 @@ class CSA_Rest_Handler extends WP_REST_Controller {
         if (is_wp_error($validation)) {
             return $validation;
         }
-
+    
         // Use WordPress standard field names
         $username = sanitize_user($request->get_param('user_login'));
         $email = sanitize_email($request->get_param('user_email'));
         $password = $request->get_param('user_pass');
-
+        $first_name = sanitize_text_field($request->get_param('first_name'));
+        $last_name = sanitize_text_field($request->get_param('last_name'));
+    
         // Validation
         if (empty($username) || empty($email)) {
             return new WP_Error(
@@ -226,6 +228,12 @@ class CSA_Rest_Handler extends WP_REST_Controller {
             );
         }
 
+        // Validate username against policy
+        $username_validation = $this->validate_username_policy($username);
+        if (is_wp_error($username_validation)) {
+            return $username_validation;
+        }
+
         if (!is_email($email)) {
             return new WP_Error(
                 'csa_invalid_email',
@@ -233,7 +241,7 @@ class CSA_Rest_Handler extends WP_REST_Controller {
                 array('status' => 400)
             );
         }
-
+    
         if (username_exists($username)) {
             return new WP_Error(
                 'csa_username_exists',
@@ -241,7 +249,7 @@ class CSA_Rest_Handler extends WP_REST_Controller {
                 array('status' => 400)
             );
         }
-
+    
         if (email_exists($email)) {
             return new WP_Error(
                 'csa_email_exists',
@@ -249,25 +257,34 @@ class CSA_Rest_Handler extends WP_REST_Controller {
                 array('status' => 400)
             );
         }
-
+    
         // Hybrid Logic: Check if password is provided
         if (!empty($password)) {
             // Flow A1: Password provided - Create active account
             $user_id = wp_create_user($username, $password, $email);
-
+    
             if (is_wp_error($user_id)) {
                 return $user_id;
             }
-
+    
+            // Add first and last name
+            if (!empty($first_name) || !empty($last_name)) {
+                wp_update_user(array(
+                    'ID' => $user_id,
+                    'first_name' => $first_name,
+                    'last_name' => $last_name,
+                ));
+            }
+    
             // Log in the user automatically
             wp_set_current_user($user_id);
             wp_set_auth_cookie($user_id);
-
+    
             $this->log_security_event('registration_success', $this->get_user_ip(), array(
                 'user_id' => $user_id,
                 'username' => $username,
             ));
-
+    
             return rest_ensure_response(array(
                 'success' => true,
                 'message' => __('Registration successful! You are now logged in.', 'custom-secure-auth'),
@@ -276,22 +293,31 @@ class CSA_Rest_Handler extends WP_REST_Controller {
         } else {
             // Flow A2: No password - Send activation email
             $user_id = wp_create_user($username, wp_generate_password(), $email);
-
+    
             if (is_wp_error($user_id)) {
                 return $user_id;
             }
-
+    
+            // Add first and last name
+            if (!empty($first_name) || !empty($last_name)) {
+                wp_update_user(array(
+                    'ID' => $user_id,
+                    'first_name' => $first_name,
+                    'last_name' => $last_name,
+                ));
+            }
+    
             // Set user as pending activation
             update_user_meta($user_id, 'csa_activation_pending', true);
-
+    
             // Generate activation key
             $activation_key = wp_generate_password(20, false);
             update_user_meta($user_id, 'csa_activation_key', $activation_key);
             update_user_meta($user_id, 'csa_activation_key_expiry', time() + (24 * 60 * 60)); // 24 hours
-
+    
             // Send activation email
             $this->send_activation_email($user_id, $username, $email, $activation_key);
-
+    
             $this->log_security_event('registration_activation_sent', $this->get_user_ip(), array(
                 'user_id' => $user_id,
                 'username' => $username,
@@ -764,7 +790,17 @@ class CSA_Rest_Handler extends WP_REST_Controller {
      */
     private function get_redirect_url() {
         $global_config = isset($this->settings['global_config']) ? $this->settings['global_config'] : array();
-        $redirect_url = isset($global_config['redirect_after_login']) ? $global_config['redirect_after_login'] : home_url();
+        $redirect_page_id = isset($global_config['redirect_after_login']) ? $global_config['redirect_after_login'] : 0;
+
+        // Get URL from page ID, or use home_url() if not set
+        if ($redirect_page_id) {
+            $redirect_url = get_permalink($redirect_page_id);
+            if (!$redirect_url) {
+                $redirect_url = home_url(); // Fallback if page doesn't exist
+            }
+        } else {
+            $redirect_url = home_url();
+        }
 
         // Allow redirect parameter override
         if (!empty($_GET['redirect_to'])) {
@@ -882,5 +918,140 @@ class CSA_Rest_Handler extends WP_REST_Controller {
         } while (username_exists($generated_username));
 
         return strtolower($generated_username);
+    }
+
+    /**
+     * Validate username against policy rules
+     *
+     * @param string $username The username to validate
+     * @return true|WP_Error True if valid, WP_Error if invalid
+     */
+    private function validate_username_policy($username) {
+        $policy = isset($this->settings['username_policy']) ? $this->settings['username_policy'] : array();
+
+        // Convert to lowercase for checking
+        $username_lower = strtolower($username);
+        $violations = array();
+
+        // Format Rules (Always Enforced)
+
+        // Length: 6-24 characters
+        if (strlen($username) < 6 || strlen($username) > 24) {
+            return new WP_Error(
+                'csa_username_length',
+                __('Username must be between 6 and 24 characters.', 'custom-secure-auth'),
+                array('status' => 400)
+            );
+        }
+
+        // Allowed characters: a-z, 0-9, underscore, hyphen
+        if (!preg_match('/^[a-z0-9_-]+$/i', $username)) {
+            return new WP_Error(
+                'csa_username_invalid_chars',
+                __('Username can only contain letters, numbers, underscores, and hyphens.', 'custom-secure-auth'),
+                array('status' => 400)
+            );
+        }
+
+        // No purely numeric usernames
+        if (is_numeric($username)) {
+            return new WP_Error(
+                'csa_username_numeric',
+                __('Username cannot be purely numeric.', 'custom-secure-auth'),
+                array('status' => 400)
+            );
+        }
+
+        // No email addresses
+        if (strpos($username, '@') !== false) {
+            return new WP_Error(
+                'csa_username_email',
+                __('Username cannot be an email address.', 'custom-secure-auth'),
+                array('status' => 400)
+            );
+        }
+
+        // Reserved Words (Always Active)
+        $reserved_words = isset($policy['reserved_words']) ? $policy['reserved_words'] : array();
+        $reserved_boundary_match = isset($policy['reserved_words_boundary_match']) && $policy['reserved_words_boundary_match'];
+        $has_reserved = false;
+
+        foreach ($reserved_words as $word) {
+            $word_lower = strtolower($word);
+
+            if ($reserved_boundary_match) {
+                // Word boundary match: block if word appears with boundaries
+                if (preg_match('/\b' . preg_quote($word_lower, '/') . '\b/', $username_lower)) {
+                    $violations[] = 'reserved';
+                    $has_reserved = true;
+                    break;
+                }
+            } else {
+                // Exact match only
+                if ($username_lower === $word_lower) {
+                    $violations[] = 'reserved';
+                    $has_reserved = true;
+                    break;
+                }
+            }
+        }
+
+        // Tier 1: Strict Block (Substring Match)
+        $strict_enabled = isset($policy['restricted_strict_enabled']) && $policy['restricted_strict_enabled'];
+        $has_inappropriate = false;
+        if ($strict_enabled) {
+            $strict_words = isset($policy['restricted_strict_words']) ? $policy['restricted_strict_words'] : array();
+
+            foreach ($strict_words as $word) {
+                $word_lower = strtolower($word);
+                // Substring match: block if word appears anywhere
+                if (strpos($username_lower, $word_lower) !== false) {
+                    $violations[] = 'inappropriate';
+                    $has_inappropriate = true;
+                    break;
+                }
+            }
+        }
+
+        // Tier 2: Isolated Block (Word Boundary Match)
+        $isolated_enabled = isset($policy['restricted_isolated_enabled']) && $policy['restricted_isolated_enabled'];
+        if ($isolated_enabled && !$has_inappropriate) {
+            $isolated_words = isset($policy['restricted_isolated_words']) ? $policy['restricted_isolated_words'] : array();
+
+            foreach ($isolated_words as $word) {
+                $word_lower = strtolower($word);
+                // Word boundary match: block only when word stands alone
+                if (preg_match('/\b' . preg_quote($word_lower, '/') . '\b/', $username_lower)) {
+                    $violations[] = 'inappropriate';
+                    $has_inappropriate = true;
+                    break;
+                }
+            }
+        }
+
+        // If there are violations, return combined error message
+        if (!empty($violations)) {
+            $message_parts = array();
+
+            if ($has_reserved) {
+                $message_parts[] = __('reserved words', 'custom-secure-auth');
+            }
+            if ($has_inappropriate) {
+                $message_parts[] = __('content that goes against our guidelines', 'custom-secure-auth');
+            }
+
+            $message = sprintf(
+                __('Username contains %s.', 'custom-secure-auth'),
+                implode(' and ', $message_parts)
+            );
+
+            return new WP_Error(
+                'csa_username_policy_violation',
+                $message,
+                array('status' => 400)
+            );
+        }
+
+        return true;
     }
 }

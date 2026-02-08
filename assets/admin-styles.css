@@ -12,7 +12,77 @@
 
 .csa-settings-wrap {
     max-width: 1200px;
-    margin: 20px 0;
+}
+
+.csa-nav-tab-wrapper {
+    /*margin-bottom: 20px;*/
+    /*border-bottom: 1px solid #ccc;*/
+}
+
+.csa-nav-tab {
+    display: inline-block;
+    padding: 10px 15px;
+    margin: 0 5px -1px 0;
+    border: 1px solid transparent;
+    text-decoration: none;
+    background: #f1f1f1;
+    color: #555;
+}
+
+.csa-nav-tab:hover {
+    background: #e8e8e8;
+    color: #000;
+}
+
+.csa-nav-tab.nav-tab-active {
+    border: 1px solid #ccc;
+    border-bottom-color: #fff!important;
+    background: #fff;
+    color: #000;
+}
+
+.csa-nav-tab .dashicons {
+    margin-right: 5px;
+}
+
+.csa-settings-form {
+    background: #fff;
+    padding: 20px;
+    /*border: 1px solid #ccc;*/
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.csa-form-table {
+    width: 100%;
+    max-width: 800px;
+}
+
+.csa-form-table th {
+    width: 200px;
+    text-align: left;
+    padding: 15px 10px 15px 0;
+    vertical-align: top;
+    font-weight: 600;
+}
+
+.csa-form-table td {
+    padding: 15px 10px;
+}
+
+.csa-form-table .description {
+    display: block;
+    margin-top: 5px;
+    color: #666;
+    font-style: italic;
+}
+
+.csa-form-table input[type="text"],
+.csa-form-table input[type="number"],
+.csa-form-table input[type="password"],
+.csa-form-table input[type="url"],
+.csa-form-table select {
+    width: 100%;
+    max-width: 400px;
 }
 
 .csa-settings-header {
@@ -41,8 +111,6 @@
    ========================================================================== */
 
 .nav-tab-wrapper {
-    margin: 0 0 20px;
-    /*border-bottom: 1px solid #c3c4c7;*/
     padding: 0;
 }
 
@@ -72,7 +140,7 @@
     margin-bottom: -1px;
     border: 1px solid #c3c4c7;
     border-bottom-color: #f0f0f1;
-    background: #f0f0f1;
+    background: #fff;
     color: #1d2327;
     font-weight: 600;
 }
@@ -88,15 +156,10 @@
    ========================================================================== */
 
 .csa-tab-content {
-    display: none;
     background: #fff;
     border: 1px solid #c3c4c7;
     box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
     padding: 20px;
-}
-
-.csa-tab-content.active {
-    display: block;
 }
 
 .csa-settings-section {
@@ -170,15 +233,6 @@
     vertical-align: middle;
 }
 
-.csa-field-help {
-    display: block;
-    margin-top: 5px;
-    color: #646970;
-    font-size: 13px;
-    line-height: 1.5;
-    font-style: italic;
-}
-
 .csa-field-code {
     background: #f6f7f7;
     border: 1px solid #c3c4c7;
@@ -188,13 +242,7 @@
     font-size: 12px;
 }
 
-/* ==========================================================================
-   Grid Builder
-   ========================================================================== */
 
-.csa-grid-builder {
-    margin-top: 10px;
-}
 
 /* Info Box */
 .csa-info-box {
@@ -203,11 +251,12 @@
     border-left: 4px solid #2271b1;
     border-radius: 4px;
     padding: 20px;
-    margin-bottom: 25px;
+    margin: 20px 0 25px;
 }
 
 .csa-info-box h3 {
     margin: 0 0 12px;
+    margin-top: 0;
     font-size: 16px;
     font-weight: 600;
     color: #1d2327;
@@ -222,12 +271,12 @@
 }
 
 .csa-info-box ul {
-    margin: 0;
+    margin: 15px 0 0 20px;
     padding-left: 20px;
 }
 
 .csa-info-box li {
-    margin-bottom: 8px;
+    margin-bottom: 10px;
     line-height: 1.6;
     color: #1d2327;
 }
@@ -242,14 +291,14 @@
     border: 1px solid #c3c4c7;
     border-radius: 4px;
     padding: 20px;
-    margin-bottom: 25px;
+    margin: 20px 0 25px;
 }
 
 .csa-quick-start h3 {
     margin: 0 0 8px;
     font-size: 16px;
     font-weight: 600;
-    color: #1d2327;
+    color: #f6b027;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -267,8 +316,9 @@
 
 .csa-preset-buttons {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 15px;
+    margin-top: 15px;
 }
 
 .csa-preset-btn {
@@ -276,23 +326,24 @@
     flex-direction: column;
     align-items: center;
     gap: 8px;
-    padding: 15px 10px;
-    background: #f6f7f7;
-    border: 2px solid #c3c4c7;
+    padding: 20px 15px;
+    background: #f8f9fa;
+    border: 2px solid #ddd;
     border-radius: 6px;
     cursor: pointer;
     transition: all 0.2s ease;
     font-size: 13px;
     font-weight: 500;
     color: #1d2327;
+    text-align: center;
 }
 
 .csa-preset-btn:hover {
-    background: #fff;
-    border-color: #2271b1;
-    color: #2271b1;
+    background: #0073aa;
+    color: #fff;
+    border-color: #0073aa;
     transform: translateY(-2px);
-    box-shadow: 0 2px 8px rgba(34, 113, 177, 0.2);
+    box-shadow: 0 4px 8px rgba(0,115,170,0.2);
 }
 
 .csa-preset-btn:active {
@@ -300,46 +351,47 @@
 }
 
 .csa-preset-btn .dashicons {
-    font-size: 24px;
-    width: 24px;
-    height: 24px;
+    font-size: 32px;
+    width: 32px;
+    height: 32px;
     color: #2271b1;
 }
 
 .csa-preset-btn:hover .dashicons {
-    color: #135e96;
+    color: #fff;
 }
 
 /* Empty State */
 .csa-empty-state {
     text-align: center;
     padding: 40px 20px;
-    background: #f6f7f7;
-    border: 2px dashed #c3c4c7;
-    border-radius: 4px;
-    margin-bottom: 20px;
+    background: #f9f9f9;
+    border: 2px dashed #ddd;
+    border-radius: 8px;
+    margin: 20px 0;
 }
 
 .csa-empty-state .dashicons {
-    font-size: 48px;
-    width: 48px;
-    height: 48px;
-    color: #8c8f94;
+    font-size: 64px;
+    width: 64px;
+    height: 64px;
+    color: #ccc;
     margin-bottom: 10px;
 }
 
 .csa-empty-state h4 {
-    margin: 0 0 10px;
+    margin: 15px 0 10px 0;
     font-size: 18px;
     font-weight: 600;
-    color: #50575e;
+    color: #666;
 }
 
 .csa-empty-state p {
-    margin: 0;
-    color: #646970;
+    margin: 0 auto;
+    color: #999;
     font-size: 14px;
     line-height: 1.6;
+    max-width: 600px;
 }
 
 /* Grid Fields Container */
@@ -359,6 +411,7 @@
     border-radius: 4px;
     padding: 20px 20px 20px 50px;
     margin-bottom: 15px;
+    cursor: move;
     transition: box-shadow 0.2s ease;
 }
 
@@ -372,9 +425,9 @@
 }
 
 .csa-grid-field-placeholder {
-    background: #e5f5fa;
-    border: 2px dashed #2271b1;
-    height: 100px;
+    background: #fafafa;
+    border: 2px dashed #ddd;
+    height: 60px;
     margin-bottom: 15px;
 }
 
@@ -411,7 +464,11 @@
 
 /* Field Row */
 .csa-grid-field-row {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
     margin-bottom: 15px;
+    align-items: flex-start;
 }
 
 .csa-grid-field-row:last-child {
@@ -419,21 +476,31 @@
 }
 
 .csa-grid-field-row label {
-    display: block;
+    display: flex;
+    min-width: auto;
+    width: 100%;
     margin-bottom: 5px;
-    font-weight: 500;
+    font-weight: 600;
     font-size: 13px;
     color: #1d2327;
+    align-items: center;
 }
 
 .csa-grid-field-row input[type="text"],
 .csa-grid-field-row input[type="email"],
 .csa-grid-field-row select {
     width: 100%;
+    flex: 1;
     padding: 8px 10px;
     border: 1px solid #8c8f94;
     border-radius: 3px;
     font-size: 13px;
+}
+
+.csa-grid-field-row input[type="checkbox"],
+.csa-grid-field-row input[type="radio"] {
+    width: auto !important;
+    flex: none !important;
 }
 
 .csa-grid-field-row input[type="text"]:focus,
@@ -459,6 +526,7 @@
     display: inline-block;
     margin-left: 5px;
     cursor: help;
+    color: #0073aa;
 }
 
 .csa-field-tooltip .dashicons {
@@ -489,29 +557,35 @@
 }
 
 /* Add Field Button */
-.csa-add-field {
+.csa-add-field,
+.csa-add-field-btn {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 16px;
     background: #2271b1;
     color: #fff;
     border: none;
-    border-radius: 4px;
-    font-size: 14px;
     font-weight: 500;
     cursor: pointer;
     transition: background 0.2s ease;
 }
 
-.csa-add-field:hover {
+.csa-add-field:hover,
+.csa-add-field-btn:hover {
     background: #135e96;
     color: #fff;
 }
 
-.csa-add-field:focus {
+.csa-add-field:focus,
+.csa-add-field-btn:focus {
     outline: 2px solid #2271b1;
     outline-offset: 2px;
+}
+
+.csa-add-field {
+    gap: 8px;
+    padding: 10px 16px;
+    border-radius: 4px;
+    font-size: 14px;
 }
 
 .csa-add-field .dashicons {
@@ -521,27 +595,10 @@
 }
 
 .csa-add-field-btn {
-    display: inline-flex;
-    align-items: center;
     gap: 5px;
     padding: 8px 12px;
-    background: #2271b1;
-    color: #fff;
-    border: none;
     border-radius: 3px;
     font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background 0.2s ease;
-}
-
-.csa-add-field-btn:hover {
-    background: #135e96;
-}
-
-.csa-add-field-btn:focus {
-    outline: 2px solid #2271b1;
-    outline-offset: 2px;
 }
 
 .csa-add-field-btn .dashicons {

@@ -11,6 +11,10 @@
    Flexbox Grid System
    ========================================================================== */
 
+.csa-form-group {
+    margin-bottom: 15px;
+}
+
 .auth-grid {
     display: flex;
     flex-wrap: wrap;
@@ -325,13 +329,17 @@ form[id^="csa-"] textarea:focus {
 
 .csa-form-links {
     margin-top: 20px;
-    text-align: center;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 15px;
     font-size: 14px;
 }
 
 .csa-form-links a {
     color: #2271b1;
     text-decoration: none;
+    white-space: nowrap;
 }
 
 .csa-form-links a:hover {
@@ -341,6 +349,40 @@ form[id^="csa-"] textarea:focus {
 .csa-form-links a:focus {
     outline: 2px solid #2271b1;
     outline-offset: 2px;
+}
+
+/* Stack links on very small screens */
+@media (max-width: 400px) {
+    .csa-form-links {
+        flex-direction: column;
+        gap: 10px;
+    }
+}
+
+/* ==========================================================================
+   Fun Username Generator
+   ========================================================================== */
+
+.csa-username-refresh {
+    color: #00a32a;
+    cursor: pointer;
+    margin-left: 8px;
+    font-size: 16px;
+    transition: color 0.2s ease;
+    display: inline-block;
+}
+
+.csa-username-refresh:hover {
+    color: #008a20;
+}
+
+.csa-username-refresh-spinning {
+    animation: csa-spin-refresh 0.6s linear infinite;
+}
+
+@keyframes csa-spin-refresh {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 
 /* ==========================================================================
