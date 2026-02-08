@@ -57,24 +57,28 @@ class CSA_Admin_Settings {
     private function init_tabs() {
         $this->tabs = array(
             'page_mapping' => array(
-                'title' => __('Page Mapping & Logic', 'custom-secure-auth'),
+                'title' => __('General', 'custom-secure-auth'),
                 'icon' => 'dashicons-admin-page',
             ),
             'security' => array(
-                'title' => __('Security (The 403 Vault)', 'custom-secure-auth'),
+                'title' => __('Security', 'custom-secure-auth'),
                 'icon' => 'dashicons-shield',
             ),
             'grid_builder' => array(
-                'title' => __('Registration Grid Builder', 'custom-secure-auth'),
+                'title' => __('Registration Form', 'custom-secure-auth'),
                 'icon' => 'dashicons-editor-table',
             ),
             'username_policy' => array(
-                'title' => __('Username Policy', 'custom-secure-auth'),
+                'title' => __('Usernames', 'custom-secure-auth'),
                 'icon' => 'dashicons-admin-users',
             ),
             'email_templates' => array(
                 'title' => __('Email Templates', 'custom-secure-auth'),
                 'icon' => 'dashicons-email',
+            ),
+            'profile_editor' => array(
+                'title' => __('User Profile', 'custom-secure-auth'),
+                'icon' => 'dashicons-id',
             ),
             'shortcodes' => array(
                 'title' => __('Shortcodes', 'custom-secure-auth'),
@@ -133,6 +137,7 @@ class CSA_Admin_Settings {
                 'recaptcha_site_key' => '',
                 'recaptcha_secret_key' => '',
                 'disable_user_enumeration' => true,
+                'block_xmlrpc' => false,
                 'rest_api_authentication_required' => false,
                 'rest_api_whitelisted_namespaces' => array('custom-secure-auth'),
             ),
@@ -166,6 +171,15 @@ class CSA_Admin_Settings {
                     'sex', 'xxx', 'porn', 'hentai', 'whore', 'slut', 'bitch',
                     'bastard', 'damn', 'hell', 'piss', 'crap'
                 ),
+            ),
+            'profile_editor' => array(
+                'enable_bio' => false,
+                'enable_display_name' => false,
+                'enable_website' => false,
+                'enable_language' => false,
+                'default_language' => 'en_US',
+                'enable_member_directory' => false,
+                'default_show_in_directory' => false,
             ),
         );
 
@@ -233,6 +247,10 @@ class CSA_Admin_Settings {
             case 'email_templates':
                 $settings = $this->save_email_templates_settings($settings);
                 break;
+
+            case 'profile_editor':
+                $settings = $this->save_profile_editor_settings($settings);
+                break;
         }
 
         // Save to database
@@ -287,6 +305,7 @@ class CSA_Admin_Settings {
 
         // REST API Security
         $settings['security']['disable_user_enumeration'] = isset($_POST['disable_user_enumeration']) ? true : false;
+        $settings['security']['block_xmlrpc'] = isset($_POST['block_xmlrpc']) ? true : false;
         $settings['security']['rest_api_authentication_required'] = isset($_POST['rest_api_authentication_required']) ? true : false;
 
         // Whitelisted Namespaces (comma-delimited)
@@ -343,6 +362,28 @@ class CSA_Admin_Settings {
         $settings['emails']['activation_template'] = isset($_POST['activation_template']) ? wp_kses_post($_POST['activation_template']) : '';
         $settings['emails']['recovery_subject'] = isset($_POST['recovery_subject']) ? sanitize_text_field($_POST['recovery_subject']) : '';
         $settings['emails']['recovery_template'] = isset($_POST['recovery_template']) ? wp_kses_post($_POST['recovery_template']) : '';
+
+        return $settings;
+    }
+
+    /**
+     * Save profile editor settings
+     *
+     * @param array $settings Current settings
+     * @return array Updated settings
+     */
+    private function save_profile_editor_settings($settings) {
+        // Save profile page to page_mapping
+        $settings['page_mapping']['profile_page'] = isset($_POST['profile_page']) ? absint($_POST['profile_page']) : 0;
+
+        // Save profile editor options
+        $settings['profile_editor']['enable_bio'] = isset($_POST['enable_bio']) ? true : false;
+        $settings['profile_editor']['enable_display_name'] = isset($_POST['enable_display_name']) ? true : false;
+        $settings['profile_editor']['enable_website'] = isset($_POST['enable_website']) ? true : false;
+        $settings['profile_editor']['enable_language'] = isset($_POST['enable_language']) ? true : false;
+        $settings['profile_editor']['default_language'] = isset($_POST['default_language']) ? sanitize_text_field($_POST['default_language']) : 'en_US';
+        $settings['profile_editor']['enable_member_directory'] = isset($_POST['enable_member_directory']) ? true : false;
+        $settings['profile_editor']['default_show_in_directory'] = isset($_POST['default_show_in_directory']) ? true : false;
 
         return $settings;
     }
@@ -779,6 +820,25 @@ class CSA_Admin_Settings {
                             <?php esc_html_e('Block /wp/v2/users endpoints', 'custom-secure-auth'); ?>
                         </label>
                         <span class="description"><?php esc_html_e('Prevents attackers from discovering admin usernames via REST API. Recommended: Always enabled.', 'custom-secure-auth'); ?></span>
+                    </td>
+                </tr>
+
+                <tr>
+                    <th scope="row">
+                        <label for="block_xmlrpc"><?php esc_html_e('Block XML-RPC', 'custom-secure-auth'); ?></label>
+                    </th>
+                    <td>
+                        <label>
+                            <input
+                                type="checkbox"
+                                name="block_xmlrpc"
+                                id="block_xmlrpc"
+                                value="1"
+                                <?php checked($settings['security']['block_xmlrpc'], true); ?>
+                            >
+                            <?php esc_html_e('Disable xmlrpc.php endpoint', 'custom-secure-auth'); ?>
+                        </label>
+                        <span class="description"><?php esc_html_e('Blocks XML-RPC protocol to prevent brute force attacks and pingback DDoS. Disabling this will break features like Jetpack, WordPress mobile app, and remote publishing tools.', 'custom-secure-auth'); ?></span>
                     </td>
                 </tr>
 
@@ -1724,6 +1784,26 @@ class CSA_Admin_Settings {
                 </div>
             </div>
 
+            <!-- Frontend Profile Editor -->
+            <div class="csa-shortcode-card">
+                <div class="csa-shortcode-header">
+                    <h3><span class="dashicons dashicons-id"></span> <?php esc_html_e('Frontend Profile Editor', 'custom-secure-auth'); ?></h3>
+                    <button type="button" class="button button-small csa-copy-btn" data-shortcode="[frontend_profile]">
+                        <span class="dashicons dashicons-clipboard"></span> <?php esc_html_e('Copy', 'custom-secure-auth'); ?>
+                    </button>
+                </div>
+                <div class="csa-shortcode-code">
+                    <code>[frontend_profile]</code>
+                </div>
+                <p class="csa-shortcode-description">
+                    <?php esc_html_e('Displays a frontend profile editor where logged-in users can update their information including name, email, password, bio, website, language preferences, and upload a custom avatar.', 'custom-secure-auth'); ?>
+                </p>
+                <div class="csa-shortcode-example">
+                    <strong><?php esc_html_e('Example:', 'custom-secure-auth'); ?></strong>
+                    <p><?php esc_html_e('Add this to your Profile page. Configure which fields to display in the User Profile Settings tab. Non-admin users will be redirected here when they try to access wp-admin profile.php.', 'custom-secure-auth'); ?></p>
+                </div>
+            </div>
+
             <!-- Login Button -->
             <div class="csa-shortcode-card">
                 <div class="csa-shortcode-header">
@@ -2519,6 +2599,186 @@ class CSA_Admin_Settings {
         `;
         document.head.appendChild(style);
         </script>
+
+        <?php
+    }
+
+    /**
+     * Render profile editor tab
+     *
+     * @param array $settings Current settings
+     */
+    private function render_profile_editor_tab($settings) {
+        $profile = isset($settings['profile_editor']) ? $settings['profile_editor'] : array();
+        $page_mapping = isset($settings['page_mapping']) ? $settings['page_mapping'] : array();
+        ?>
+        <div class="csa-info-box">
+            <h3><span class="dashicons dashicons-info"></span> <?php esc_html_e('About User Profile Settings', 'custom-secure-auth'); ?></h3>
+            <p><?php esc_html_e('Configure which fields appear on the frontend profile editor. Users can edit their profile using the [frontend_profile] shortcode.', 'custom-secure-auth'); ?></p>
+            <p><?php esc_html_e('Don\'t forget to configure the Profile Page in Page Mapping tab!', 'custom-secure-auth'); ?></p>
+        </div>
+
+        <h2><?php esc_html_e('Page Configuration', 'custom-secure-auth'); ?></h2>
+        <table class="form-table csa-form-table">
+            <tbody>
+                <tr>
+                    <th scope="row">
+                        <label for="profile_page"><?php esc_html_e('Profile Page', 'custom-secure-auth'); ?></label>
+                    </th>
+                    <td>
+                        <?php
+                        wp_dropdown_pages(array(
+                            'name' => 'profile_page',
+                            'id' => 'profile_page',
+                            'echo' => 1,
+                            'show_option_none' => __('— Select a Page —', 'custom-secure-auth'),
+                            'option_none_value' => '0',
+                            'selected' => isset($page_mapping['profile_page']) ? $page_mapping['profile_page'] : 0,
+                        ));
+                        ?>
+                        <p class="description">
+                            <?php esc_html_e('Select the page where you\'ve added the [frontend_profile] shortcode. Non-admin users will be redirected here from wp-admin profile page.', 'custom-secure-auth'); ?>
+                        </p>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2><?php esc_html_e('Profile Fields', 'custom-secure-auth'); ?></h2>
+        <p><?php esc_html_e('Enable or disable fields that appear in the frontend profile editor.', 'custom-secure-auth'); ?></p>
+
+        <table class="form-table csa-form-table">
+            <tbody>
+                <tr>
+                    <th scope="row">
+                        <label for="enable_bio"><?php esc_html_e('Enable Bio', 'custom-secure-auth'); ?></label>
+                    </th>
+                    <td>
+                        <label class="csa-toggle">
+                            <input type="checkbox" name="enable_bio" id="enable_bio" value="1" <?php checked(!empty($profile['enable_bio'])); ?>>
+                            <span class="csa-toggle-slider"></span>
+                        </label>
+                        <p class="description">
+                            <?php esc_html_e('Allow users to add a bio/description to their profile.', 'custom-secure-auth'); ?>
+                        </p>
+                    </td>
+                </tr>
+
+                <tr>
+                    <th scope="row">
+                        <label for="enable_display_name"><?php esc_html_e('Enable Display Name', 'custom-secure-auth'); ?></label>
+                    </th>
+                    <td>
+                        <label class="csa-toggle">
+                            <input type="checkbox" name="enable_display_name" id="enable_display_name" value="1" <?php checked(!empty($profile['enable_display_name'])); ?>>
+                            <span class="csa-toggle-slider"></span>
+                        </label>
+                        <p class="description">
+                            <?php esc_html_e('Allow users to choose how their name is displayed publicly.', 'custom-secure-auth'); ?>
+                        </p>
+                    </td>
+                </tr>
+
+                <tr>
+                    <th scope="row">
+                        <label for="enable_website"><?php esc_html_e('Enable Website', 'custom-secure-auth'); ?></label>
+                    </th>
+                    <td>
+                        <label class="csa-toggle">
+                            <input type="checkbox" name="enable_website" id="enable_website" value="1" <?php checked(!empty($profile['enable_website'])); ?>>
+                            <span class="csa-toggle-slider"></span>
+                        </label>
+                        <p class="description">
+                            <?php esc_html_e('Allow users to add their website URL.', 'custom-secure-auth'); ?>
+                        </p>
+                    </td>
+                </tr>
+
+                <tr>
+                    <th scope="row">
+                        <label for="enable_member_directory"><?php esc_html_e('Enable Member Directory', 'custom-secure-auth'); ?></label>
+                    </th>
+                    <td>
+                        <label class="csa-toggle">
+                            <input type="checkbox" name="enable_member_directory" id="enable_member_directory" value="1" <?php checked(!empty($profile['enable_member_directory'])); ?>>
+                            <span class="csa-toggle-slider"></span>
+                        </label>
+                        <p class="description">
+                            <?php esc_html_e('Allow users to opt-in/out of appearing in member directory listings.', 'custom-secure-auth'); ?>
+                        </p>
+                    </td>
+                </tr>
+
+                <tr>
+                    <th scope="row">
+                        <label for="default_show_in_directory"><?php esc_html_e('Default: Show in Directory', 'custom-secure-auth'); ?></label>
+                    </th>
+                    <td>
+                        <label class="csa-toggle">
+                            <input type="checkbox" name="default_show_in_directory" id="default_show_in_directory" value="1" <?php checked(!empty($profile['default_show_in_directory'])); ?>>
+                            <span class="csa-toggle-slider"></span>
+                        </label>
+                        <p class="description">
+                            <?php esc_html_e('If enabled, new users will be shown in member directory by default (they can opt-out).', 'custom-secure-auth'); ?>
+                        </p>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2><?php esc_html_e('Language Settings', 'custom-secure-auth'); ?></h2>
+        <p><?php esc_html_e('Allow users to select their preferred language for the frontend.', 'custom-secure-auth'); ?></p>
+
+        <table class="form-table csa-form-table">
+            <tbody>
+                <tr>
+                    <th scope="row">
+                        <label for="enable_language"><?php esc_html_e('Enable Language Selection', 'custom-secure-auth'); ?></label>
+                    </th>
+                    <td>
+                        <label class="csa-toggle">
+                            <input type="checkbox" name="enable_language" id="enable_language" value="1" <?php checked(!empty($profile['enable_language'])); ?>>
+                            <span class="csa-toggle-slider"></span>
+                        </label>
+                        <p class="description">
+                            <?php esc_html_e('Allow users to select their preferred language in their profile.', 'custom-secure-auth'); ?>
+                        </p>
+                    </td>
+                </tr>
+
+                <tr>
+                    <th scope="row">
+                        <label for="default_language"><?php esc_html_e('Default Language', 'custom-secure-auth'); ?></label>
+                    </th>
+                    <td>
+                        <?php
+                        if (!function_exists('wp_get_available_translations')) {
+                            require_once ABSPATH . 'wp-admin/includes/translation-install.php';
+                        }
+                        $translations = wp_get_available_translations();
+                        $selected_lang = isset($profile['default_language']) ? $profile['default_language'] : 'en_US';
+                        ?>
+                        <select name="default_language" id="default_language" style="min-width: 250px;">
+                            <option value="en_US" <?php selected($selected_lang, 'en_US'); ?>>English (United States)</option>
+                            <?php
+                            foreach ($translations as $translation) {
+                                if ($translation['language'] === 'en_US') continue;
+                                echo '<option value="' . esc_attr($translation['language']) . '" ' . selected($selected_lang, $translation['language'], false) . '>' . esc_html($translation['native_name']) . '</option>';
+                            }
+                            ?>
+                        </select>
+                        <p class="description">
+                            <?php esc_html_e('This language will be used for users who haven\'t selected a language preference.', 'custom-secure-auth'); ?>
+                        </p>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="csa-info-box">
+            <h4><span class="dashicons dashicons-lightbulb"></span> <?php esc_html_e('GTranslate Integration', 'custom-secure-auth'); ?></h4>
+            <p><?php esc_html_e('If you have the GTranslate plugin installed, user language preferences will automatically trigger page translation.', 'custom-secure-auth'); ?></p>
+        </div>
 
         <?php
     }

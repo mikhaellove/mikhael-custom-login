@@ -1,8 +1,8 @@
 <?php
 /*
 Plugin Name: Mikhael's Custom Secure Auth
-Description: A secure, modular authentication system with custom login, registration, password reset, and grid-based form builder with advanced security features.
-Version: 2.0.1
+Description: A secure, modular authentication system with custom login, registration, password reset, grid-based form builder, frontend profile editor, and advanced security features.
+Version: 2.1.0
 Author: Mikhael Love
 */
 
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('CSA_VERSION', '2.0.1');
+define('CSA_VERSION', '2.1.0');
 define('CSA_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('CSA_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('CSA_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -74,6 +74,9 @@ class Custom_Secure_Auth {
         add_filter('rest_authentication_errors', array($this, 'restrict_rest_api_access'));
         add_filter('rest_endpoints', array($this, 'disable_user_enumeration_endpoint'));
 
+        // XML-RPC Security
+        add_filter('xmlrpc_enabled', array($this, 'block_xmlrpc_access'));
+
         // Logout redirect
         add_filter('logout_redirect', array($this, 'custom_logout_redirect'), 10, 3);
 
@@ -98,6 +101,9 @@ class Custom_Secure_Auth {
 
         // Initialize user columns (admin only, requires manage_options capability)
         CSA_User_Columns::instance();
+
+        // Initialize profile editor
+        new CSA_Profile_Editor();
     }
 
     /**
@@ -331,12 +337,65 @@ class Custom_Secure_Auth {
             }
         }
 
+        // Log the blocked attempt for debugging
+        $this->log_blocked_rest_api_attempt($current_route);
+
         // Block access with 404 to hide security setting
         return new WP_Error(
             'rest_no_route',
             __('No route was found matching the URL and request method.', 'custom-secure-auth'),
             array('status' => 404)
         );
+    }
+
+    /**
+     * Log blocked REST API attempt for debugging
+     *
+     * @param string $route The blocked route
+     */
+    private function log_blocked_rest_api_attempt($route) {
+        // Get user IP address
+        $ip = $this->get_user_ip();
+
+        // Create log entry
+        $log_entry = array(
+            'timestamp' => current_time('Y-m-d H:i:s'),
+            'route' => $route,
+            'ip' => $ip,
+        );
+
+        // Get existing log
+        $blocked_log = get_option('csa_blocked_namespaces_log', array());
+
+        // Add new entry at the beginning
+        array_unshift($blocked_log, $log_entry);
+
+        // Keep only last 20 entries
+        $blocked_log = array_slice($blocked_log, 0, 20);
+
+        // Save updated log
+        update_option('csa_blocked_namespaces_log', $blocked_log, false);
+    }
+
+    /**
+     * Get user IP address
+     *
+     * @return string IP address
+     */
+    private function get_user_ip() {
+        // Check for Cloudflare
+        if (!empty($_SERVER['HTTP_CF_CONNECTING_IP'])) {
+            return sanitize_text_field($_SERVER['HTTP_CF_CONNECTING_IP']);
+        }
+
+        // Check for proxy
+        if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+            $ip_list = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']);
+            return sanitize_text_field(trim($ip_list[0]));
+        }
+
+        // Default to REMOTE_ADDR
+        return !empty($_SERVER['REMOTE_ADDR']) ? sanitize_text_field($_SERVER['REMOTE_ADDR']) : '0.0.0.0';
     }
 
     /**
@@ -365,6 +424,29 @@ class Custom_Secure_Auth {
         }
 
         return $endpoints;
+    }
+
+    /**
+     * Block XML-RPC access based on settings
+     *
+     * @param bool $enabled Whether XML-RPC is enabled
+     * @return bool|void False to block, true to allow, void for 404
+     */
+    public function block_xmlrpc_access($enabled) {
+        // Get settings
+        $settings = get_option(CSA_SETTINGS_SLUG, array());
+        $security = isset($settings['security']) ? $settings['security'] : array();
+        $block_xmlrpc = isset($security['block_xmlrpc']) && $security['block_xmlrpc'];
+
+        // If blocking is not enabled, allow access
+        if (!$block_xmlrpc) {
+            return $enabled;
+        }
+
+        // Return standard 404 response and exit
+        status_header(404);
+        nocache_headers();
+        exit;
     }
 
     /**
