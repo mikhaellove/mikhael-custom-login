@@ -962,21 +962,23 @@ class CSA_Rest_Handler extends WP_REST_Controller {
 
         // Reserved Words (Always Active)
         $reserved_words = isset($policy['reserved_words']) ? $policy['reserved_words'] : array();
-        $reserved_boundary_match = isset($policy['reserved_words_boundary_match']) && $policy['reserved_words_boundary_match'];
+        $reserved_substring_match = isset($policy['reserved_words_boundary_match']) && $policy['reserved_words_boundary_match'];
         $has_reserved = false;
 
         foreach ($reserved_words as $word) {
             $word_lower = strtolower($word);
 
-            if ($reserved_boundary_match) {
-                // Word boundary match: block if word appears with boundaries
-                if (preg_match('/\b' . preg_quote($word_lower, '/') . '\b/', $username_lower)) {
+            if ($reserved_substring_match) {
+                // Substring match: block if word appears ANYWHERE in username
+                // Example: blocks "administrator" in "administrator_123", "myadministrator", etc.
+                if (strpos($username_lower, $word_lower) !== false) {
                     $violations[] = 'reserved';
                     $has_reserved = true;
                     break;
                 }
             } else {
-                // Exact match only
+                // Exact match only: block only if username is exactly the reserved word
+                // Example: blocks "administrator" but NOT "administrator_123"
                 if ($username_lower === $word_lower) {
                     $violations[] = 'reserved';
                     $has_reserved = true;
