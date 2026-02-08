@@ -157,8 +157,8 @@ This plugin is provided "as is" without warranty of any kind, express or implied
 **Integration Features**
 - Tracks last login time (displayed in user table)
 - Custom user columns in admin panel
-- Works with governance logging (NSFW restrictions plugin)
-- Compatible with `[nsfw_tos_interceptor]` shortcode
+- Works with governance logging (content restrictions plugin)
+- Compatible with `[registration_tos_interceptor]` shortcode
 
 ## Installation
 
@@ -450,7 +450,7 @@ Users can register and access content while maintaining complete anonymity. User
 - Any standards-compliant WordPress theme
 
 **Known Integrations:**
-- **mikhael-nsfw-restrictions**: Governance logging for authentication events (optional companion plugin)
+- **mikhael-content-restrictions**: Governance logging for authentication events (optional companion plugin)
 - **mikhael-shadow-mode**: Respects shadow mode event logging filters (optional companion plugin)
 - WordPress core authentication hooks
 - Standard WordPress user management systems
@@ -614,7 +614,7 @@ mikhael-custom-login/
 **Actions:**
 - `set_auth_cookie` - Tracks last login time
 - `rest_api_init` - Registers REST endpoints
-- `wp_login_failed` - Increments failed attempt counter (if NSFW plugin active)
+- `wp_login_failed` - Increments failed attempt counter (if optional plugin active)
 
 **Filters:**
 - `rest_authentication_errors` - Enforces REST API authentication
@@ -646,7 +646,7 @@ Call `$this->log_security_event($event_type, $ip, $data)` from within REST handl
 - XML-RPC blocking with standard 404 response
 - REST API blocked request logging (last 20 attempts)
 - Endpoint tracking in governance logs for failed login attempts
-- Login Endpoint Analysis audit (NSFW restrictions plugin integration)
+- Login Endpoint Analysis audit (content restrictions plugin integration)
 
 **Security:**
 - Enhanced user enumeration protection
