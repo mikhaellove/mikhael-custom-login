@@ -4,13 +4,43 @@
 ![WordPress](https://img.shields.io/badge/WordPress-5.0%2B-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-GPL--2.0%2B-orange.svg)
 
-A privacy-first, security-hardened authentication plugin for WordPress that I built for my NSFW content site. It's completely free and open-source because I believe good security shouldn't be locked behind paywalls.
+A privacy-first, security-hardened authentication plugin for WordPress. It's completely free and open-source because I believe robust security shouldn't be locked behind paywalls or monthly subscriptions.
 
 ## Why I Built This
 
-After testing dozens of authentication plugins for my adult content site, I realized they all fell short in one critical area: user privacy. Most plugins leak whether a username or email exists through timing attacks, error messages, or REST API endpoints. This makes it trivial for stalkers or bad actors to enumerate users.
+After testing dozens of authentication plugins, I found they all fell short in critical security areas. Most had significant vulnerabilities:
 
-I needed something better. So I built it. 
+- **User enumeration attacks** through timing attacks, error messages, or REST API endpoints
+- **Weak CSRF protection** relying only on WordPress nonces
+- **Limited rate limiting** or lockout mechanisms
+- **No comprehensive REST API security** options
+- **Missing advanced features** without expensive subscriptions
+- **Poor privacy protection** for user accounts
+
+I needed something better. I couldn't find a free plugin that comprehensively addressed these security gaps and included the advanced features I required. So I built it myself and decided to share it freely with the community.
+
+## ⚠️ Important Disclaimer
+
+**USE AT YOUR OWN RISK**
+
+This plugin is provided "as is" without warranty of any kind, express or implied. While every effort has been made to create a secure authentication system, you are ultimately responsible for your website's security.
+
+**You are responsible for:**
+- Properly configuring the plugin for your specific security requirements
+- Regularly monitoring security logs and failed login attempts
+- Keeping WordPress, PHP, and all plugins up to date
+- Implementing additional security measures appropriate to your use case
+- Testing the plugin thoroughly in your environment before deploying to production
+- Maintaining proper backups of your website and database
+
+**The author and contributors assume no liability for:**
+- Security breaches or unauthorized access to your website
+- Data loss or corruption resulting from plugin use
+- Downtime or service interruptions
+- Conflicts with other plugins or themes
+- Any damages, direct or indirect, arising from the use of this plugin
+
+**Security is a shared responsibility.** This plugin provides tools and features to enhance your WordPress authentication security, but it cannot guarantee complete protection against all threats. Always follow security best practices and consult with security professionals for high-risk environments.
 
 ## Core Philosophy
 
@@ -339,22 +369,28 @@ Body: <p>Hello {user_name},</p>
 
 ## Use Cases
 
-### NSFW Content Sites
+### Privacy-Focused Platforms
 
-**Why I Built This:**
-I run an adult content site where user privacy is paramount. Standard login plugins leak user information through various attack vectors.
+**Ideal For:**
+- Sites requiring strong user privacy protections
+- Platforms vulnerable to user enumeration attacks
+- Anonymous forums or communities
+- Whistleblower platforms
+- Mental health communities
+- Any platform where user privacy is critical
 
 **Recommended Settings:**
 - Enable all zero-enumeration features
 - Use email activation flow (disable auto-login after registration)
-- Enable fun username generator
+- Enable fun username generator for anonymity
 - Add privacy warning about anonymous usernames
 - Enable strict content filtering in username policy
 - Require REST API authentication
 - Block XML-RPC endpoint
+- Monitor security logs regularly
 
 **Result:**
-Users can register and access content while maintaining complete anonymity. Stalkers and harassment attempts are significantly reduced.
+Users can register and access content while maintaining complete anonymity. User enumeration and harassment attempts are significantly reduced.
 
 ### Membership Sites
 
@@ -371,20 +407,23 @@ Users can register and access content while maintaining complete anonymity. Stal
 - Redirect after login to welcome page
 - Enable reCAPTCHA for bot protection
 
-### Privacy-Focused Platforms
+### High-Security Environments
 
 **Ideal For:**
-- Whistleblower platforms
-- Anonymous forums
-- Mental health communities
-- Any platform where user privacy matters
+- Corporate intranets
+- Government portals
+- Financial services platforms
+- Healthcare systems
+- Educational institutions with compliance requirements
 
 **Recommended Settings:**
-- Maximum security hardening
-- Force fun username generator
-- Disable all enumeration endpoints
+- Maximum security hardening enabled
+- Strict rate limiting (3 attempts, 24-hour lockout)
+- Short token expiry (10 minutes)
 - Require email activation
-- Monitor security logs regularly
+- Enable reCAPTCHA v3
+- Comprehensive REST API authentication
+- Regular security log audits
 
 ## Compatibility
 
@@ -411,9 +450,10 @@ Users can register and access content while maintaining complete anonymity. Stal
 - Any standards-compliant WordPress theme
 
 **Known Integrations:**
-- **mikhael-nsfw-restrictions**: Governance logging for authentication events
-- **mikhael-shadow-mode**: Respects shadow mode event logging filters
+- **mikhael-nsfw-restrictions**: Governance logging for authentication events (optional companion plugin)
+- **mikhael-shadow-mode**: Respects shadow mode event logging filters (optional companion plugin)
 - WordPress core authentication hooks
+- Standard WordPress user management systems
 
 **Known Conflicts:**
 - None reported
@@ -660,9 +700,10 @@ You should have received a copy of the GNU General Public License along with thi
 - WordPress Community - Core functionality and best practices
 
 **Inspiration:**
-- Too many overpriced authentication plugins
-- Lack of privacy-focused solutions in the WordPress ecosystem
-- Real-world security requirements from running an NSFW content site
+- Too many overpriced authentication plugins with subscription models
+- Lack of comprehensive security solutions in the WordPress ecosystem
+- Real-world security requirements and attack patterns
+- Community need for privacy-focused authentication
 
 **Built With:**
 - WordPress REST API
