@@ -173,9 +173,21 @@ class CSA_Shortcodes {
             exit;
         }
 
+        // Check for logout message transient
+        $logout_message = get_transient('csa_logout_message');
+        if ($logout_message) {
+            // Delete transient immediately to prevent repeat display
+            delete_transient('csa_logout_message');
+        }
+
         ob_start();
         ?>
         <div class="csa-auth-container csa-login-container">
+            <?php if ($logout_message): ?>
+                <div class="csa-notice csa-notice-success">
+                    <p><?php esc_html_e('You have been logged out.', 'custom-secure-auth'); ?></p>
+                </div>
+            <?php endif; ?>
             <form class="csa-auth-form csa-login-form" id="csa-login-form" method="post">
                 <div class="csa-form-messages"></div>
 

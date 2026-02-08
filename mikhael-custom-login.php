@@ -66,9 +66,16 @@ class Custom_Secure_Auth {
         add_action('rest_api_init', array($this, 'register_rest_routes'));
         add_action('plugins_loaded', array($this, 'init_components'));
 
+        // Track user login times (must be registered early)
+        // Using set_auth_cookie instead of wp_login to catch REST API logins too
+        add_action('set_auth_cookie', array('CSA_User_Columns', 'track_user_login'), 10, 5);
+
         // REST API Security
         add_filter('rest_authentication_errors', array($this, 'restrict_rest_api_access'));
         add_filter('rest_endpoints', array($this, 'disable_user_enumeration_endpoint'));
+
+        // Logout redirect
+        add_filter('logout_redirect', array($this, 'custom_logout_redirect'), 10, 3);
 
         register_activation_hook(__FILE__, array($this, 'activate'));
         register_deactivation_hook(__FILE__, array($this, 'deactivate'));
@@ -88,6 +95,9 @@ class Custom_Secure_Auth {
 
         // Initialize email manager
         new CSA_Email_Manager();
+
+        // Initialize user columns (admin only, requires manage_options capability)
+        CSA_User_Columns::instance();
     }
 
     /**
@@ -355,6 +365,34 @@ class Custom_Secure_Auth {
         }
 
         return $endpoints;
+    }
+
+    /**
+     * Custom logout redirect
+     * Redirects to the configured login page if set, otherwise to home page
+     *
+     * @param string $redirect_to The redirect destination URL
+     * @param string $requested_redirect_to The requested redirect destination URL passed as a parameter
+     * @param WP_User $user The WP_User object for the user that's logging out
+     * @return string The redirect URL
+     */
+    public function custom_logout_redirect($redirect_to, $requested_redirect_to, $user) {
+        $settings = get_option(CSA_SETTINGS_SLUG, array());
+        $login_page_id = isset($settings['page_mapping']['login_page']) ? $settings['page_mapping']['login_page'] : 0;
+
+        // Set transient for logout message (60 second expiry)
+        set_transient('csa_logout_message', '1', 60);
+
+        // If login page is configured in plugin settings, redirect there
+        if ($login_page_id) {
+            $logout_redirect = get_permalink($login_page_id);
+            if ($logout_redirect) {
+                return $logout_redirect;
+            }
+        }
+
+        // Fallback to home page
+        return home_url();
     }
 }
 

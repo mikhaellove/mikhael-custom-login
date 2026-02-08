@@ -228,12 +228,6 @@ class CSA_Rest_Handler extends WP_REST_Controller {
             );
         }
 
-        // Validate username against policy
-        $username_validation = $this->validate_username_policy($username);
-        if (is_wp_error($username_validation)) {
-            return $username_validation;
-        }
-
         if (!is_email($email)) {
             return new WP_Error(
                 'csa_invalid_email',
@@ -242,13 +236,20 @@ class CSA_Rest_Handler extends WP_REST_Controller {
             );
         }
 
-        // Check both username and email existence with generic error (prevents enumeration)
+        // Check existence FIRST to prevent username policy enumeration
+        // This ensures generic error message for both policy violations and existing accounts
         if (username_exists($username) || email_exists($email)) {
             return new WP_Error(
                 'csa_registration_conflict',
                 __('Unable to complete registration with the provided information. Please try different credentials or contact support if you need assistance.', 'custom-secure-auth'),
                 array('status' => 400)
             );
+        }
+
+        // Validate username against policy AFTER existence check
+        $username_validation = $this->validate_username_policy($username);
+        if (is_wp_error($username_validation)) {
+            return $username_validation;
         }
     
         // Hybrid Logic: Check if password is provided
@@ -409,9 +410,10 @@ class CSA_Rest_Handler extends WP_REST_Controller {
         }
 
         // Use WordPress core retrieve_password function
+        // This sends the email automatically, customized by class-email-manager.php via filters
         $result = retrieve_password($user_login);
 
-        // Send custom recovery email if user exists
+        // Get user for logging purposes
         $user = null;
         if (strpos($user_login, '@')) {
             $user = get_user_by('email', $user_login);
@@ -419,9 +421,8 @@ class CSA_Rest_Handler extends WP_REST_Controller {
             $user = get_user_by('login', $user_login);
         }
 
+        // Log the event (don't send duplicate email)
         if ($user && !is_wp_error($result)) {
-            $this->send_recovery_email($user->ID, $user->user_login, $user->user_email);
-
             $this->log_security_event('lost_password_success', $this->get_user_ip(), array(
                 'user_login' => $user_login,
             ));
@@ -507,8 +508,8 @@ class CSA_Rest_Handler extends WP_REST_Controller {
             delete_user_meta($user->ID, 'csa_activation_key');
             delete_user_meta($user->ID, 'csa_activation_key_expiry');
 
-            // Set the password
-            wp_set_password($password, $user->ID);
+            // Reset the password using WordPress core function (triggers proper hooks)
+            reset_password($user, $password);
 
             $this->log_security_event('account_activated', $ip, array(
                 'user_id' => $user->ID,
@@ -540,7 +541,8 @@ class CSA_Rest_Handler extends WP_REST_Controller {
         }
 
         // Valid password reset key
-        wp_set_password($password, $user->ID);
+        // Use WordPress core reset_password() function (triggers proper hooks)
+        reset_password($user, $password);
 
         $this->log_security_event('password_reset_success', $ip, array(
             'user_id' => $user->ID,

@@ -79,13 +79,13 @@ class CSA_Email_Manager {
         // Build the password reset URL
         $reset_url = $this->build_reset_url($key, $user_login, $is_activation);
 
-        // Prepare placeholders
+        // Prepare placeholders (pre-sanitized for security)
         $placeholders = array(
-            'user_name' => $this->get_user_display_name($user_data),
-            'set_password_url' => $reset_url,
-            'site_name' => $this->get_site_name(),
-            'user_email' => $user_data->user_email,
-            'user_login' => $user_data->user_login,
+            'user_name' => esc_html($this->get_user_display_name($user_data)),
+            'set_password_url' => $reset_url, // Already sanitized with esc_url_raw() in build_reset_url()
+            'site_name' => esc_html($this->get_site_name()),
+            'user_email' => esc_html($user_data->user_email),
+            'user_login' => esc_html($user_data->user_login),
         );
 
         // Replace placeholders in template
@@ -113,12 +113,12 @@ class CSA_Email_Manager {
             $subject = $this->get_recovery_subject();
         }
 
-        // Prepare placeholders
+        // Prepare placeholders (pre-sanitized for security)
         $placeholders = array(
-            'user_name' => $this->get_user_display_name($user_data),
-            'site_name' => $this->get_site_name(),
-            'user_email' => $user_data->user_email,
-            'user_login' => $user_data->user_login,
+            'user_name' => esc_html($this->get_user_display_name($user_data)),
+            'site_name' => esc_html($this->get_site_name()),
+            'user_email' => esc_html($user_data->user_email),
+            'user_login' => esc_html($user_data->user_login),
         );
 
         // Replace placeholders in subject
@@ -249,8 +249,12 @@ class CSA_Email_Manager {
     /**
      * Replace placeholders in template
      *
+     * Note: Placeholder values should already be sanitized before being passed to this function.
+     * URLs should be sanitized with esc_url_raw(), text with esc_html(), etc.
+     * This function performs NO additional escaping to preserve HTML links and formatting.
+     *
      * @param string $template Template content
-     * @param array $placeholders Associative array of placeholders and their values
+     * @param array $placeholders Associative array of placeholders and their values (pre-sanitized)
      * @return string Template with placeholders replaced
      */
     private function replace_placeholders($template, $placeholders) {
@@ -265,7 +269,8 @@ class CSA_Email_Manager {
 
         foreach ($placeholders as $key => $value) {
             $search[] = '{' . $key . '}';
-            $replace[] = esc_html($value);
+            // No escaping here - values must be pre-sanitized at source
+            $replace[] = $value;
         }
 
         // Replace placeholders
@@ -277,20 +282,20 @@ class CSA_Email_Manager {
     /**
      * Get user display name
      *
-     * Returns the user's display name, falling back to username if not set
+     * Returns the user's display name as configured in their WordPress profile.
+     * Respects the user's display name preference from Settings > Profile.
      *
      * @param WP_User $user User object
      * @return string User display name
      */
     private function get_user_display_name($user) {
-        if (!empty($user->display_name) && $user->display_name !== $user->user_login) {
+        // Always use display_name - this is the user's chosen preference in WordPress
+        // WordPress automatically sets this to user_login if no other value is chosen
+        if (!empty($user->display_name)) {
             return $user->display_name;
         }
 
-        if (!empty($user->first_name)) {
-            return $user->first_name;
-        }
-
+        // Fallback only if display_name is somehow empty (shouldn't happen in normal WordPress)
         return $user->user_login;
     }
 

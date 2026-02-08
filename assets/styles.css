@@ -228,7 +228,8 @@ form[id^="csa-"] textarea:focus {
    Messages
    ========================================================================== */
 
-.csa-message {
+.csa-message,
+.csa-notice {
     padding: 12px 15px;
     margin-bottom: 20px;
     border-radius: 4px;
@@ -237,28 +238,36 @@ form[id^="csa-"] textarea:focus {
     line-height: 1.5;
 }
 
-.csa-error {
+.csa-error,
+.csa-notice-error {
     background-color: #fcf0f1;
     border-left-color: #d63638;
     color: #3c434a;
 }
 
-.csa-success {
+.csa-success,
+.csa-notice-success {
     background-color: #edfaef;
     border-left-color: #00a32a;
     color: #3c434a;
 }
 
-.csa-warning {
+.csa-warning,
+.csa-notice-warning {
     background-color: #fcf9e8;
     border-left-color: #dba617;
     color: #3c434a;
 }
 
-.csa-info {
+.csa-info,
+.csa-notice-info {
     background-color: #e5f5fa;
     border-left-color: #2271b1;
     color: #3c434a;
+}
+
+.csa-notice p {
+    margin: 0;
 }
 
 /* Inline error messages for fields */
