@@ -80,6 +80,9 @@ class Custom_Secure_Auth {
         // Logout redirect
         add_filter('logout_redirect', array($this, 'custom_logout_redirect'), 10, 3);
 
+        // Role-based session expiration
+        add_filter('auth_cookie_expiration', array($this, 'custom_session_expiration'), 10, 3);
+
         register_activation_hook(__FILE__, array($this, 'activate'));
         register_deactivation_hook(__FILE__, array($this, 'deactivate'));
     }
@@ -475,6 +478,65 @@ class Custom_Secure_Auth {
 
         // Fallback to home page
         return home_url();
+    }
+
+    /**
+     * Custom session expiration based on user role
+     *
+     * @param int $expiration Session expiration in seconds
+     * @param int $user_id User ID
+     * @param bool $remember Whether the user clicked "Remember Me"
+     * @return int Modified session expiration in seconds
+     */
+    public function custom_session_expiration($expiration, $user_id, $remember) {
+        // Get settings
+        $settings = get_option(CSA_SETTINGS_SLUG, array());
+        $security = isset($settings['security']) ? $settings['security'] : array();
+
+        // Get global default (in hours, default to 48 if not set)
+        $global_default_hours = isset($security['session_expiration_global_default'])
+            ? absint($security['session_expiration_global_default'])
+            : 48;
+
+        // Get role overrides
+        $role_overrides = isset($security['session_expiration_role_overrides'])
+            ? $security['session_expiration_role_overrides']
+            : array();
+
+        // Get user object
+        $user = get_userdata($user_id);
+        if (!$user) {
+            // If we can't get user data, return original expiration
+            return $expiration;
+        }
+
+        // Check for role-specific override (priority: first role found with override)
+        $custom_hours = null;
+        if (!empty($role_overrides) && is_array($role_overrides)) {
+            foreach ($user->roles as $role) {
+                if (isset($role_overrides[$role]) && absint($role_overrides[$role]) > 0) {
+                    $custom_hours = absint($role_overrides[$role]);
+                    break; // Use first matching role override
+                }
+            }
+        }
+
+        // If no role-specific override found, use global default
+        if ($custom_hours === null) {
+            $custom_hours = $global_default_hours;
+        }
+
+        // Ensure minimum of 1 hour to prevent lockout loops
+        if ($custom_hours < 1) {
+            $custom_hours = 1;
+        }
+
+        // Convert hours to seconds
+        $custom_expiration = $custom_hours * HOUR_IN_SECONDS;
+
+        // Override both standard and "Remember Me" for strictest security
+        // This ensures role-based policies always apply
+        return $custom_expiration;
     }
 }
 

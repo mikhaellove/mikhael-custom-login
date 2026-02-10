@@ -278,7 +278,11 @@ class CSA_Rest_Handler extends WP_REST_Controller {
                 'user_id' => $user_id,
                 'username' => $username,
             ));
-    
+
+            // Send admin notification email
+            $email_manager = new CSA_Email_Manager();
+            $email_manager->send_admin_registration_notification($user_id);
+
             return rest_ensure_response(array(
                 'success' => true,
                 'message' => __('Registration successful! You are now logged in.', 'custom-secure-auth'),
@@ -311,11 +315,15 @@ class CSA_Rest_Handler extends WP_REST_Controller {
     
             // Send activation email
             $this->send_activation_email($user_id, $username, $email, $activation_key);
-    
+
             $this->log_security_event('registration_activation_sent', $this->get_user_ip(), array(
                 'user_id' => $user_id,
                 'username' => $username,
             ));
+
+            // Send admin notification email
+            $email_manager = new CSA_Email_Manager();
+            $email_manager->send_admin_registration_notification($user_id);
 
             return rest_ensure_response(array(
                 'success' => true,

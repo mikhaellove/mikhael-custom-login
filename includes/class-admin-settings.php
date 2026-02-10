@@ -140,6 +140,8 @@ class CSA_Admin_Settings {
                 'block_xmlrpc' => false,
                 'rest_api_authentication_required' => false,
                 'rest_api_whitelisted_namespaces' => array('custom-secure-auth'),
+                'session_expiration_global_default' => 48, // Hours (WordPress default)
+                'session_expiration_role_overrides' => array(), // ['role_slug' => hours]
             ),
             'grid_builder' => array(
                 'username_privacy_warning' => 'Privacy Tip: To keep your identity separate, we recommend using a username different from your real name or public social media handles.',
@@ -149,6 +151,9 @@ class CSA_Admin_Settings {
                 'activation_template' => '<p>Hello {user_name},</p><p>Please click the link below to activate your account:</p><p><a href="{set_password_url}">Activate Account</a></p>',
                 'recovery_subject' => 'Reset Your Password - {site_name}',
                 'recovery_template' => '<p>Hello {user_name},</p><p>Please click the link below to reset your password:</p><p><a href="{set_password_url}">Reset Password</a></p>',
+                'admin_notification_enabled' => false,
+                'admin_notification_subject' => 'New User Registration - {site_name}',
+                'admin_notification_template' => '<p>A new user has registered on {site_name}:</p><p><strong>Username:</strong> {user_login}<br><strong>Email:</strong> {user_email}<br><strong>Display Name:</strong> {user_name}<br><strong>Registration Date:</strong> {registration_date}</p>',
             ),
             'username_policy' => array(
                 'reserved_words' => array(
@@ -317,6 +322,36 @@ class CSA_Admin_Settings {
             $settings['security']['rest_api_whitelisted_namespaces'] = array_values($namespaces_array);
         }
 
+        // Session Expiration Settings
+        // Global Default
+        $global_default = isset($_POST['session_expiration_global_default']) ? absint($_POST['session_expiration_global_default']) : 48;
+        // Ensure minimum of 1 hour
+        if ($global_default < 1) {
+            $global_default = 1;
+        }
+        $settings['security']['session_expiration_global_default'] = $global_default;
+
+        // Role Overrides
+        $role_overrides = array();
+        if (isset($_POST['session_expiration_roles']) && isset($_POST['session_expiration_hours'])) {
+            $roles = $_POST['session_expiration_roles'];
+            $hours = $_POST['session_expiration_hours'];
+
+            if (is_array($roles) && is_array($hours) && count($roles) === count($hours)) {
+                for ($i = 0; $i < count($roles); $i++) {
+                    $role_slug = sanitize_key($roles[$i]);
+                    $role_hours = absint($hours[$i]);
+
+                    // Only save if role is not empty and hours is at least 1
+                    if (!empty($role_slug) && $role_hours >= 1) {
+                        // Prevent duplicates - last one wins
+                        $role_overrides[$role_slug] = $role_hours;
+                    }
+                }
+            }
+        }
+        $settings['security']['session_expiration_role_overrides'] = $role_overrides;
+
         return $settings;
     }
 
@@ -362,6 +397,9 @@ class CSA_Admin_Settings {
         $settings['emails']['activation_template'] = isset($_POST['activation_template']) ? wp_kses_post($_POST['activation_template']) : '';
         $settings['emails']['recovery_subject'] = isset($_POST['recovery_subject']) ? sanitize_text_field($_POST['recovery_subject']) : '';
         $settings['emails']['recovery_template'] = isset($_POST['recovery_template']) ? wp_kses_post($_POST['recovery_template']) : '';
+        $settings['emails']['admin_notification_enabled'] = isset($_POST['admin_notification_enabled']) ? true : false;
+        $settings['emails']['admin_notification_subject'] = isset($_POST['admin_notification_subject']) ? sanitize_text_field($_POST['admin_notification_subject']) : '';
+        $settings['emails']['admin_notification_template'] = isset($_POST['admin_notification_template']) ? wp_kses_post($_POST['admin_notification_template']) : '';
 
         return $settings;
     }
@@ -1151,6 +1189,146 @@ class CSA_Admin_Settings {
         })();
         </script>
 
+        <!-- Session Expiration Management Section -->
+        <h2><?php esc_html_e('Session Expiration Management', 'custom-secure-auth'); ?></h2>
+        <p><?php esc_html_e('Configure how long users can stay logged in before being automatically logged out. You can set a global default and create role-specific overrides for granular control.', 'custom-secure-auth'); ?></p>
+
+        <table class="form-table csa-form-table">
+            <tbody>
+                <tr>
+                    <th scope="row">
+                        <label for="session_expiration_global_default"><?php esc_html_e('Global Default (Hours)', 'custom-secure-auth'); ?></label>
+                    </th>
+                    <td>
+                        <input
+                            type="number"
+                            name="session_expiration_global_default"
+                            id="session_expiration_global_default"
+                            value="<?php echo esc_attr($settings['security']['session_expiration_global_default']); ?>"
+                            min="1"
+                            max="8760"
+                            step="1"
+                            style="width: 100px;"
+                        >
+                        <span class="description">
+                            <?php esc_html_e('Default session length for all users (WordPress default is 48 hours). This applies unless a role-specific override exists below.', 'custom-secure-auth'); ?>
+                        </span>
+                    </td>
+                </tr>
+
+                <tr>
+                    <th scope="row">
+                        <label><?php esc_html_e('Role-Specific Overrides', 'custom-secure-auth'); ?></label>
+                    </th>
+                    <td>
+                        <div id="csa-session-role-overrides">
+                            <?php
+                            $role_overrides = isset($settings['security']['session_expiration_role_overrides'])
+                                ? $settings['security']['session_expiration_role_overrides']
+                                : array();
+
+                            // Get all WordPress roles
+                            $wp_roles = wp_roles();
+                            $all_roles = $wp_roles->get_names();
+
+                            if (!empty($role_overrides)) {
+                                foreach ($role_overrides as $role_slug => $hours) {
+                                    $role_name = isset($all_roles[$role_slug]) ? translate_user_role($all_roles[$role_slug]) : $role_slug;
+                                    ?>
+                                    <div class="csa-role-override-row" style="margin-bottom: 10px; display: flex; gap: 10px; align-items: center;">
+                                        <select name="session_expiration_roles[]" class="csa-role-select" style="width: 200px;">
+                                            <option value="<?php echo esc_attr($role_slug); ?>" selected><?php echo esc_html($role_name); ?></option>
+                                            <?php foreach ($all_roles as $slug => $name) : ?>
+                                                <?php if ($slug !== $role_slug) : ?>
+                                                    <option value="<?php echo esc_attr($slug); ?>"><?php echo esc_html(translate_user_role($name)); ?></option>
+                                                <?php endif; ?>
+                                            <?php endforeach; ?>
+                                        </select>
+                                        <input
+                                            type="number"
+                                            name="session_expiration_hours[]"
+                                            value="<?php echo esc_attr($hours); ?>"
+                                            min="1"
+                                            max="8760"
+                                            step="1"
+                                            style="width: 100px;"
+                                            placeholder="Hours"
+                                        >
+                                        <span class="description" style="flex: 1;"><?php esc_html_e('hours', 'custom-secure-auth'); ?></span>
+                                        <button type="button" class="button csa-remove-role-override"><?php esc_html_e('Remove', 'custom-secure-auth'); ?></button>
+                                    </div>
+                                    <?php
+                                }
+                            }
+                            ?>
+                        </div>
+
+                        <button type="button" id="csa-add-role-override" class="button" style="margin-top: 10px;">
+                            <?php esc_html_e('+ Add Role Override', 'custom-secure-auth'); ?>
+                        </button>
+
+                        <p class="description" style="margin-top: 15px;">
+                            <strong><?php esc_html_e('How it works:', 'custom-secure-auth'); ?></strong><br>
+                            <?php esc_html_e('1. Select a user role (e.g., Subscriber, Editor, Administrator)', 'custom-secure-auth'); ?><br>
+                            <?php esc_html_e('2. Set how many hours they can stay logged in', 'custom-secure-auth'); ?><br>
+                            <?php esc_html_e('3. Role-specific rules override the global default', 'custom-secure-auth'); ?><br>
+                            <?php esc_html_e('4. These rules apply to both standard and "Remember Me" logins for strictest security', 'custom-secure-auth'); ?>
+                        </p>
+
+                        <div class="notice notice-warning inline" style="margin-top: 15px;">
+                            <p>
+                                <span class="dashicons dashicons-warning" style="color: #d63638;"></span>
+                                <strong><?php esc_html_e('Important Notes:', 'custom-secure-auth'); ?></strong>
+                            </p>
+                            <ul style="margin-left: 25px;">
+                                <li><?php esc_html_e('Setting values less than 1 hour may cause users to lose unsaved work in the WordPress editor', 'custom-secure-auth'); ?></li>
+                                <li><?php esc_html_e('Changes only affect new logins - existing sessions maintain their original expiration', 'custom-secure-auth'); ?></li>
+                                <li><?php esc_html_e('When a session expires, users will be redirected to the login page on their next page load', 'custom-secure-auth'); ?></li>
+                            </ul>
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- JavaScript for Role Override Management -->
+        <script>
+        jQuery(document).ready(function($) {
+            // Template for new role override row
+            var roleOptionsTemplate = <?php echo json_encode($all_roles); ?>;
+
+            function createRoleOverrideRow() {
+                var row = $('<div class="csa-role-override-row" style="margin-bottom: 10px; display: flex; gap: 10px; align-items: center;"></div>');
+
+                var select = $('<select name="session_expiration_roles[]" class="csa-role-select" style="width: 200px;"></select>');
+                select.append('<option value=""><?php esc_html_e('-- Select Role --', 'custom-secure-auth'); ?></option>');
+
+                $.each(roleOptionsTemplate, function(slug, name) {
+                    // Translate role name (already done server-side, so just use it)
+                    select.append($('<option></option>').attr('value', slug).text(name));
+                });
+
+                var hoursInput = $('<input type="number" name="session_expiration_hours[]" min="1" max="8760" step="1" style="width: 100px;" placeholder="<?php esc_html_e('Hours', 'custom-secure-auth'); ?>">');
+                var label = $('<span class="description" style="flex: 1;"><?php esc_html_e('hours', 'custom-secure-auth'); ?></span>');
+                var removeBtn = $('<button type="button" class="button csa-remove-role-override"><?php esc_html_e('Remove', 'custom-secure-auth'); ?></button>');
+
+                row.append(select).append(hoursInput).append(label).append(removeBtn);
+                return row;
+            }
+
+            // Add new role override
+            $('#csa-add-role-override').on('click', function() {
+                var newRow = createRoleOverrideRow();
+                $('#csa-session-role-overrides').append(newRow);
+            });
+
+            // Remove role override
+            $(document).on('click', '.csa-remove-role-override', function() {
+                $(this).closest('.csa-role-override-row').remove();
+            });
+        });
+        </script>
+
         <?php
     }
 
@@ -1684,6 +1862,77 @@ class CSA_Admin_Settings {
                             )
                         );
                         ?>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2><?php esc_html_e('Admin Registration Notification', 'custom-secure-auth'); ?></h2>
+        <p><?php esc_html_e('This email is sent to the site administrator when a new user registers. No "To" field is required - it automatically sends to the admin email address.', 'custom-secure-auth'); ?></p>
+        <p><?php esc_html_e('Placeholders: {user_name}, {user_email}, {user_login}, {site_name}, and {registration_date}', 'custom-secure-auth'); ?></p>
+
+        <table class="form-table csa-form-table">
+            <tbody>
+                <tr>
+                    <th scope="row">
+                        <label for="admin_notification_enabled"><?php esc_html_e('Enable Notification', 'custom-secure-auth'); ?></label>
+                    </th>
+                    <td>
+                        <label>
+                            <input
+                                type="checkbox"
+                                name="admin_notification_enabled"
+                                id="admin_notification_enabled"
+                                value="1"
+                                <?php checked($settings['emails']['admin_notification_enabled'], true); ?>
+                            >
+                            <?php esc_html_e('Send notification email to site administrator when new users register', 'custom-secure-auth'); ?>
+                        </label>
+                        <p class="description">
+                            <?php printf(
+                                esc_html__('Emails will be sent to: %s', 'custom-secure-auth'),
+                                '<strong>' . esc_html(get_option('admin_email')) . '</strong>'
+                            ); ?>
+                        </p>
+                    </td>
+                </tr>
+
+                <tr>
+                    <th scope="row">
+                        <label for="admin_notification_subject"><?php esc_html_e('Subject', 'custom-secure-auth'); ?></label>
+                    </th>
+                    <td>
+                        <input
+                            type="text"
+                            name="admin_notification_subject"
+                            id="admin_notification_subject"
+                            value="<?php echo esc_attr($settings['emails']['admin_notification_subject']); ?>"
+                            style="width: 100%; max-width: 600px;"
+                        >
+                    </td>
+                </tr>
+
+                <tr>
+                    <th scope="row">
+                        <label for="admin_notification_template"><?php esc_html_e('Email Template', 'custom-secure-auth'); ?></label>
+                    </th>
+                    <td>
+                        <?php
+                        wp_editor(
+                            $settings['emails']['admin_notification_template'],
+                            'admin_notification_template',
+                            array(
+                                'textarea_name' => 'admin_notification_template',
+                                'textarea_rows' => 10,
+                                'media_buttons' => false,
+                                'teeny' => true,
+                                'quicktags' => true,
+                            )
+                        );
+                        ?>
+                        <p class="description">
+                            <?php esc_html_e('Additional placeholder available: {registration_date}', 'custom-secure-auth'); ?>
+                        </p>
                     </td>
                 </tr>
             </tbody>

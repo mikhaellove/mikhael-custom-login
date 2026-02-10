@@ -499,4 +499,50 @@ class CSA_Email_Manager {
 
         return $result;
     }
+
+    /**
+     * Send admin notification email when new user registers
+     *
+     * @param int $user_id User ID
+     * @return bool Whether the email was sent successfully
+     */
+    public function send_admin_registration_notification($user_id) {
+        // Check if admin notifications are enabled
+        $emails = isset($this->settings['emails']) ? $this->settings['emails'] : array();
+        $notification_enabled = isset($emails['admin_notification_enabled']) && $emails['admin_notification_enabled'];
+
+        if (!$notification_enabled) {
+            return false;
+        }
+
+        // Get user data
+        $user = get_userdata($user_id);
+
+        if (!$user) {
+            return false;
+        }
+
+        // Get admin email
+        $admin_email = get_option('admin_email');
+
+        if (!is_email($admin_email)) {
+            return false;
+        }
+
+        // Get subject and template
+        $subject = isset($emails['admin_notification_subject']) ? $emails['admin_notification_subject'] : 'New User Registration - {site_name}';
+        $template = isset($emails['admin_notification_template']) ? $emails['admin_notification_template'] : '<p>A new user has registered on {site_name}:</p><p><strong>Username:</strong> {user_login}<br><strong>Email:</strong> {user_email}<br><strong>Display Name:</strong> {user_name}<br><strong>Registration Date:</strong> {registration_date}</p>';
+
+        // Prepare placeholders (pre-sanitized for security)
+        $placeholders = array(
+            'user_name' => esc_html($this->get_user_display_name($user)),
+            'site_name' => esc_html($this->get_site_name()),
+            'user_email' => esc_html($user->user_email),
+            'user_login' => esc_html($user->user_login),
+            'registration_date' => esc_html(date_i18n(get_option('date_format') . ' ' . get_option('time_format'), strtotime($user->user_registered))),
+        );
+
+        // Send email
+        return $this->send_email($admin_email, $subject, $template, $placeholders);
+    }
 }
