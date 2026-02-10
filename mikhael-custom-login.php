@@ -1,10 +1,78 @@
 <?php
-/*
-Plugin Name: Mikhael's Custom Secure Auth
-Description: A secure, modular authentication system with custom login, registration, password reset, grid-based form builder, frontend profile editor, and advanced security features.
-Version: 2.1.0
-Author: Mikhael Love
-*/
+/**
+ * Plugin Name: Mikhael's Custom Secure Auth
+ * Description: A secure, modular authentication system with custom login, registration, password reset, grid-based form builder, frontend profile editor, and advanced security features.
+ * Version: 2.1.0
+ * Author: Mikhael Love
+ * Text Domain: custom-secure-auth
+ * Domain Path: /languages
+ * License: GPL-2.0+
+ * License URI: http://www.gnu.org/licenses/gpl-2.0.txt
+ *
+ * @package Custom_Secure_Auth
+ * @version 2.1.0
+ * @since 1.0.0
+ *
+ * PLUGIN ARCHITECTURE OVERVIEW
+ * ============================
+ * This plugin implements a multi-layered security-first authentication system
+ * designed to prevent user enumeration, brute force attacks, and unauthorized access.
+ *
+ * Core Components:
+ * ----------------
+ * 1. REST Handler (class-rest-handler.php)
+ *    - Implements "The 403 Gauntlet" - 5-layer security validation
+ *    - Handles registration, login, password recovery, and password setting
+ *    - Manages HMAC-based CSRF tokens (not WordPress nonces)
+ *    - Zero-enumeration error messaging
+ *
+ * 2. Admin Settings (class-admin-settings.php)
+ *    - Multi-tab settings interface
+ *    - Grid-based form builder for registration forms
+ *    - Username policy management
+ *    - Role-based session expiration control (v2.1.0+)
+ *    - Email template customization
+ *
+ * 3. Email Manager (class-email-manager.php)
+ *    - Custom HTML email templates
+ *    - Admin registration notifications (v2.1.0+)
+ *    - Activation and password recovery emails
+ *    - Template variable replacement system
+ *
+ * 4. Shortcodes (class-shortcodes.php)
+ *    - Frontend form rendering
+ *    - Dynamic field generation from grid builder config
+ *    - Auth button (login/logout/register)
+ *
+ * 5. Profile Editor (class-profile-editor.php)
+ *    - Frontend user profile management
+ *    - Custom avatar system
+ *    - Multi-language support with GTranslate integration
+ *    - Email change confirmation flow
+ *
+ * 6. User Columns (class-user-columns.php)
+ *    - Custom admin user table columns
+ *    - Last login tracking
+ *
+ * Security Features:
+ * ------------------
+ * - HMAC-based tokens using AUTH_KEY from wp-config.php
+ * - IP-based rate limiting with Cloudflare support
+ * - Honeypot fields for bot detection
+ * - Google reCAPTCHA v3 integration
+ * - REST API authentication requirements
+ * - XML-RPC blocking
+ * - User enumeration prevention
+ * - Role-based session expiration (v2.1.0+)
+ *
+ * Integration Points:
+ * -------------------
+ * - mikhail-content-restrictions: Governance logging for auth events
+ * - mikhail-shadow-mode: Respects shadow mode event logging filters
+ * - GTranslate: Automatic language switching based on user preference
+ *
+ * @see README.md for detailed documentation
+ */
 
 // Exit if accessed directly
 if (!defined('ABSPATH')) {
@@ -58,31 +126,50 @@ class Custom_Secure_Auth {
 
     /**
      * Initialize WordPress hooks
+     *
+     * Registers all WordPress actions and filters used by the plugin.
+     * Hook priorities are carefully chosen to ensure proper execution order.
      */
     private function init_hooks() {
+        // Translation support
         add_action('init', array($this, 'load_textdomain'));
+
+        // Asset loading
         add_action('wp_enqueue_scripts', array($this, 'enqueue_frontend_assets'));
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_assets'));
+
+        // REST API initialization
         add_action('rest_api_init', array($this, 'register_rest_routes'));
+
+        // Component initialization (runs after all plugins loaded)
         add_action('plugins_loaded', array($this, 'init_components'));
 
-        // Track user login times (must be registered early)
-        // Using set_auth_cookie instead of wp_login to catch REST API logins too
+        // Login Tracking
+        // Using set_auth_cookie instead of wp_login to catch both:
+        // 1. Standard WordPress logins
+        // 2. REST API logins (wp_set_auth_cookie calls this hook)
+        // Priority 10, accepts 5 parameters
         add_action('set_auth_cookie', array('CSA_User_Columns', 'track_user_login'), 10, 5);
 
-        // REST API Security
+        // REST API Security Filters
+        // These filters implement zero-enumeration and access control
         add_filter('rest_authentication_errors', array($this, 'restrict_rest_api_access'));
         add_filter('rest_endpoints', array($this, 'disable_user_enumeration_endpoint'));
 
         // XML-RPC Security
+        // Blocks XML-RPC entirely to prevent brute force and pingback DDoS attacks
         add_filter('xmlrpc_enabled', array($this, 'block_xmlrpc_access'));
 
-        // Logout redirect
+        // Logout Behavior
+        // Redirects users to custom login page and sets logout message transient
         add_filter('logout_redirect', array($this, 'custom_logout_redirect'), 10, 3);
 
-        // Role-based session expiration
+        // Session Management (v2.1.0+)
+        // Implements role-based session expiration with configurable durations
+        // This overrides both standard and "Remember Me" cookie expiration
         add_filter('auth_cookie_expiration', array($this, 'custom_session_expiration'), 10, 3);
 
+        // Plugin Lifecycle Hooks
         register_activation_hook(__FILE__, array($this, 'activate'));
         register_deactivation_hook(__FILE__, array($this, 'deactivate'));
     }
@@ -483,34 +570,55 @@ class Custom_Secure_Auth {
     /**
      * Custom session expiration based on user role
      *
-     * @param int $expiration Session expiration in seconds
+     * Implements role-based session expiration control (v2.1.0+).
+     * This filter overrides WordPress default cookie expiration for both
+     * standard logins and "Remember Me" logins to enforce security policies.
+     *
+     * Security Rationale:
+     * ------------------
+     * - Admins may need shorter sessions for security (e.g., 2 hours)
+     * - Subscribers may get longer sessions for convenience (e.g., 7 days)
+     * - Enforces minimum 1-hour session to prevent lockout loops
+     * - Ignores $remember parameter to ensure consistent policy enforcement
+     *
+     * Configuration Flow:
+     * -------------------
+     * 1. Check for role-specific override (first matching role wins)
+     * 2. Fall back to global default if no role override
+     * 3. Apply minimum 1-hour safety constraint
+     * 4. Convert hours to seconds and return
+     *
+     * @since 2.1.0
+     * @param int $expiration Default session expiration in seconds from WordPress
      * @param int $user_id User ID
-     * @param bool $remember Whether the user clicked "Remember Me"
+     * @param bool $remember Whether user clicked "Remember Me" (ignored for consistency)
      * @return int Modified session expiration in seconds
      */
     public function custom_session_expiration($expiration, $user_id, $remember) {
-        // Get settings
+        // Get plugin settings
         $settings = get_option(CSA_SETTINGS_SLUG, array());
         $security = isset($settings['security']) ? $settings['security'] : array();
 
-        // Get global default (in hours, default to 48 if not set)
+        // Get global default session length (in hours, default: 48)
+        // WordPress default is 2 days for normal, 14 days for "Remember Me"
         $global_default_hours = isset($security['session_expiration_global_default'])
             ? absint($security['session_expiration_global_default'])
             : 48;
 
-        // Get role overrides
+        // Get role-specific overrides (array of 'role_slug' => hours)
         $role_overrides = isset($security['session_expiration_role_overrides'])
             ? $security['session_expiration_role_overrides']
             : array();
 
-        // Get user object
+        // Get user data
         $user = get_userdata($user_id);
         if (!$user) {
-            // If we can't get user data, return original expiration
+            // Safety fallback: if user data unavailable, use original expiration
             return $expiration;
         }
 
-        // Check for role-specific override (priority: first role found with override)
+        // Check for role-specific override
+        // Priority: First role with an override wins (order matters for multi-role users)
         $custom_hours = null;
         if (!empty($role_overrides) && is_array($role_overrides)) {
             foreach ($user->roles as $role) {
@@ -526,7 +634,8 @@ class Custom_Secure_Auth {
             $custom_hours = $global_default_hours;
         }
 
-        // Ensure minimum of 1 hour to prevent lockout loops
+        // Safety constraint: Minimum 1 hour to prevent lockout loops
+        // (Very short sessions could log users out while still filling forms)
         if ($custom_hours < 1) {
             $custom_hours = 1;
         }
@@ -534,8 +643,9 @@ class Custom_Secure_Auth {
         // Convert hours to seconds
         $custom_expiration = $custom_hours * HOUR_IN_SECONDS;
 
-        // Override both standard and "Remember Me" for strictest security
-        // This ensures role-based policies always apply
+        // IMPORTANT: We ignore the $remember parameter
+        // This ensures role-based policies always apply consistently,
+        // preventing users from extending sessions beyond admin-defined limits
         return $custom_expiration;
     }
 }

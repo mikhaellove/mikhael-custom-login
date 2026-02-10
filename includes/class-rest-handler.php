@@ -2,7 +2,103 @@
 /**
  * REST API Handler with 403 Security Gauntlet
  *
- * @package CustomSecureAuth
+ * This class handles all REST API endpoints for authentication flows including
+ * registration, login, password recovery, and password setting. It implements
+ * a multi-layered security system called "The 403 Gauntlet" to prevent attacks.
+ *
+ * THE 403 GAUNTLET - Multi-Layer Security Validation System
+ * ===========================================================
+ * Every authenticated request passes through 5 security layers:
+ *
+ * Layer 1: IP Lockout Check (The Gate)
+ *   - Checks if IP is temporarily blocked due to failed attempts
+ *   - Uses transients for temporary blocks (configurable duration)
+ *   - Prevents brute force attacks at the earliest possible point
+ *
+ * Layer 2: HTTP Referer Validation
+ *   - Ensures request originated from same site (not external)
+ *   - Prevents CSRF attacks from external sites
+ *   - Validates referer starts with site URL
+ *
+ * Layer 3: HMAC Token Validation (NOT WordPress nonces)
+ *   - Uses HMAC-SHA256 with AUTH_KEY from wp-config.php
+ *   - Token combines: IP address + timestamp + AUTH_KEY
+ *   - Time-based expiration (configurable, default: 30 minutes)
+ *   - Resistant to timing attacks via hash_equals()
+ *   - Unique per session and IP address
+ *
+ * Layer 4: Honeypot Field Check
+ *   - Hidden field that humans shouldn't fill
+ *   - Catches automated bots
+ *   - Field name: 'csa_website'
+ *   - Can be disabled in settings
+ *
+ * Layer 5: Google reCAPTCHA v3
+ *   - Optional - only if configured in settings
+ *   - Invisible to users
+ *   - Verifies with Google's API
+ *   - Provides score-based bot detection
+ *
+ * AUTHENTICATION FLOWS
+ * ====================
+ *
+ * Flow A: Registration (Hybrid System)
+ *   A1 (Password Provided):
+ *     1. Validate all input and security layers
+ *     2. Create user account with provided password
+ *     3. Auto-login user immediately
+ *     4. Send admin notification (v2.1.0+)
+ *     5. Redirect to configured page
+ *
+ *   A2 (No Password - Email Activation):
+ *     1. Validate all input and security layers
+ *     2. Create user account with random password
+ *     3. Set activation_pending flag
+ *     4. Generate 20-char activation key (24-hour expiry)
+ *     5. Send activation email
+ *     6. Send admin notification (v2.1.0+)
+ *     7. Display "check email" message
+ *
+ * Flow B: Login
+ *   1. Run 403 Gauntlet
+ *   2. Check if account is activation_pending
+ *   3. Authenticate credentials
+ *   4. Log security events
+ *   5. Set auth cookie and redirect
+ *
+ * Flow C: Password Recovery
+ *   1. Run 403 Gauntlet
+ *   2. Use WordPress core retrieve_password()
+ *   3. Always return generic success message (zero-enumeration)
+ *   4. Email only sent if account exists
+ *   5. Email customized by CSA_Email_Manager filters
+ *
+ * Flow D: Password Set/Reset (Activation or Recovery)
+ *   1. Validate reset key from WordPress OR activation key from CSA
+ *   2. Set new password
+ *   3. Clear activation flags if activating
+ *   4. Optional auto-login (configurable)
+ *   5. Redirect appropriately
+ *
+ * ZERO-ENUMERATION DESIGN
+ * ========================
+ * All error messages are deliberately generic to prevent attackers from
+ * discovering which usernames/emails exist in the system:
+ *
+ * - Registration conflicts (username/email exists) → same error as policy violations
+ * - Login failures → same error regardless of whether username exists
+ * - Password recovery → always says "email sent if account exists"
+ * - Timing attacks prevented by consistent processing paths
+ *
+ * IP DETECTION HIERARCHY
+ * =======================
+ * 1. Cloudflare: HTTP_CF_CONNECTING_IP (if behind Cloudflare proxy)
+ * 2. Proxy: HTTP_X_FORWARDED_FOR (first IP in comma-separated list)
+ * 3. Direct: REMOTE_ADDR (direct connection to server)
+ *
+ * @package Custom_Secure_Auth
+ * @since 1.0.0
+ * @version 2.1.0
  */
 
 if (!defined('ABSPATH')) {
@@ -11,9 +107,26 @@ if (!defined('ABSPATH')) {
 
 class CSA_Rest_Handler extends WP_REST_Controller {
 
+    /**
+     * Plugin settings array
+     *
+     * @var array
+     */
     private $settings;
+
+    /**
+     * REST API namespace
+     *
+     * @var string
+     */
     protected $namespace = 'custom-secure-auth/v1';
 
+    /**
+     * Constructor
+     *
+     * Loads plugin settings from WordPress options table.
+     * Settings are loaded once and cached in memory for performance.
+     */
     public function __construct() {
         $this->settings = get_option(CSA_SETTINGS_SLUG, array());
     }

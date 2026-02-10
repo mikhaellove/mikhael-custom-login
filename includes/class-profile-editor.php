@@ -2,11 +2,77 @@
 /**
  * Profile Editor Class
  *
- * Handles frontend user profile editing functionality
- * Migrated from mikhael-frontend-user-page plugin
+ * Provides frontend user profile editing functionality via shortcodes.
+ * Allows users to manage their profiles without accessing wp-admin.
+ *
+ * MIGRATION NOTES
+ * ===============
+ * This class was migrated from the standalone "mikhael-frontend-user-page" plugin
+ * into Custom Secure Auth in version 2.1.0 to provide integrated user management.
+ *
+ * FEATURES
+ * ========
+ * 1. Frontend Profile Form
+ *    - Custom avatar upload (stored as attachment)
+ *    - First name, last name, display name
+ *    - Email change with confirmation
+ *    - Website URL
+ *    - Bio/description
+ *    - Password change (requires current password)
+ *    - Language preference
+ *    - Member directory visibility toggle
+ *
+ * 2. Email Change Flow
+ *    - Multi-site aware (different flows for multi-site vs single-site)
+ *    - Sends confirmation email to new address
+ *    - Uses hash-based verification link
+ *    - Only updates email after confirmation
+ *
+ * 3. Custom Avatar System
+ *    - Replaces default Gravatar with uploaded image
+ *    - Custom image size: 200x200px (profile-avatar)
+ *    - Stored as WordPress attachment
+ *    - Old avatars automatically deleted on new upload
+ *    - Filters get_avatar() to display custom avatar
+ *
+ * 4. Language Management
+ *    - Per-user language preference
+ *    - Integrates with WordPress locale system
+ *    - Overrides site default for logged-in users
+ *    - Falls back to site default if not set
+ *
+ * 5. GTranslate Integration
+ *    - Automatic language switching for logged-in users
+ *    - JavaScript-based translation trigger
+ *    - Maps WordPress locales to GTranslate language codes
+ *    - Special handling for Chinese (zh-CN, zh-TW) and Portuguese (pt-BR)
+ *    - Only activates if GTranslate plugin is active
+ *
+ * 6. Admin Redirection
+ *    - Non-admin users redirected from wp-admin/profile.php
+ *    - Prevents access to backend profile editor
+ *    - Redirects to configured frontend profile page
+ *
+ * SECURITY CONSIDERATIONS
+ * =======================
+ * - WordPress nonces for form validation
+ * - Current password required for password changes
+ * - Email change requires confirmation
+ * - All input sanitized with appropriate WordPress functions
+ * - File upload restricted to images only
+ * - Capability checks prevent unauthorized access
+ *
+ * SHORTCODE USAGE
+ * ===============
+ * [frontend_profile]
+ * - Must be logged in to view
+ * - Displays complete profile editing form
+ * - Handles form submission via POST
+ * - Shows success/error messages via transients
  *
  * @package Custom_Secure_Auth
  * @since 2.1.0
+ * @version 2.1.0
  */
 
 // Exit if accessed directly
@@ -17,12 +83,18 @@ if (!defined('ABSPATH')) {
 /**
  * CSA_Profile_Editor Class
  *
- * Provides frontend profile editing via shortcode with customizable fields
+ * Manages all frontend user profile editing functionality including
+ * avatar uploads, email changes, password updates, and language preferences.
  */
 class CSA_Profile_Editor {
 
     /**
-     * Plugin settings
+     * Plugin settings array
+     *
+     * Contains profile editor configuration including:
+     * - Enabled fields (display_name, website, language, bio, etc.)
+     * - Default language setting
+     * - Member directory default visibility
      *
      * @var array
      */
@@ -30,6 +102,8 @@ class CSA_Profile_Editor {
 
     /**
      * Constructor
+     *
+     * Loads settings and initializes all WordPress hooks.
      */
     public function __construct() {
         $this->settings = get_option(CSA_SETTINGS_SLUG, array());
@@ -620,7 +694,51 @@ class CSA_Profile_Editor {
     }
 
     /**
-     * GTranslate integration
+     * GTranslate integration for automatic language switching
+     *
+     * Automatically switches GTranslate to user's preferred language when they
+     * visit the site. This creates a seamless multilingual experience.
+     *
+     * How It Works:
+     * -------------
+     * 1. Check if user is logged in (anonymous users use site default)
+     * 2. Get user's language preference from user meta
+     * 3. Verify GTranslate plugin is active
+     * 4. Map WordPress locale to GTranslate language code
+     * 5. Inject JavaScript to trigger GTranslate's doGTranslate() function
+     * 6. Skip if user's language matches site default (no translation needed)
+     *
+     * Locale Mapping:
+     * ---------------
+     * WordPress uses locales like "en_US", "es_ES", "pt_BR"
+     * GTranslate uses two-letter codes like "en", "es", "pt"
+     *
+     * Special cases:
+     * - zh_CN → zh-CN (Simplified Chinese)
+     * - zh_TW → zh-TW (Traditional Chinese)
+     * - pt_BR → pt (Brazilian Portuguese)
+     *
+     * GTranslate Detection:
+     * ---------------------
+     * 1. Check for GTRANSLATE_VERSION constant (most reliable)
+     * 2. Check if gtranslate/gtranslate.php is active
+     * 3. Check if GTranslate class exists (fallback)
+     *
+     * JavaScript Execution:
+     * ---------------------
+     * - Waits for window load event to ensure GTranslate is initialized
+     * - Checks for googtrans cookie to prevent infinite translation loops
+     * - Only triggers if user's language not already active
+     * - Uses jQuery for cross-browser compatibility
+     *
+     * Cookie Check Rationale:
+     * -----------------------
+     * GTranslate sets a "googtrans" cookie when translation is active.
+     * We check this cookie to avoid re-triggering translation on every page load,
+     * which would cause performance issues and potential infinite loops.
+     *
+     * @since 2.1.0
+     * @return void
      */
     public function gtranslate_integration() {
         if (!is_user_logged_in()) {

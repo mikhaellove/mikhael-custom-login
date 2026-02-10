@@ -2,10 +2,61 @@
 /**
  * Email Manager Class
  *
- * Handles email template processing and sending for Custom Secure Auth
+ * Handles all email template processing and sending for Custom Secure Auth.
+ * This class manages four types of emails:
+ * 1. Account activation emails (for users registering without password)
+ * 2. Password recovery emails (for users requesting password reset)
+ * 3. Admin notification emails (when new users register) - v2.1.0+
+ * 4. Email change confirmation (handled by WordPress core)
+ *
+ * EMAIL TEMPLATE SYSTEM
+ * =====================
+ * Templates support variable replacement with these placeholders:
+ *
+ * User Variables:
+ *   {user_name}        - Display name or username
+ *   {user_login}       - Login username (v2.1.0+)
+ *   {user_email}       - User's email address
+ *   {registration_date} - Registration timestamp (admin notifications only)
+ *
+ * Site Variables:
+ *   {site_name}        - WordPress site title (get_bloginfo('name'))
+ *
+ * Action Variables:
+ *   {set_password_url} - Full URL with key/login params for password setting
+ *
+ * WORDPRESS INTEGRATION
+ * =====================
+ * This class hooks into WordPress core email filters to customize:
+ * - retrieve_password_message: Customizes password reset email body
+ * - retrieve_password_title: Customizes password reset email subject
+ * - wp_mail_content_type: Forces HTML content type for styled emails
+ *
+ * The hooks allow us to:
+ * 1. Detect if user needs activation vs. password recovery
+ * 2. Apply appropriate custom template
+ * 3. Replace placeholders with actual values
+ * 4. Send HTML-formatted emails with proper content-type header
+ *
+ * SECURITY CONSIDERATIONS
+ * =======================
+ * - All template variables are escaped before replacement
+ * - URLs are sanitized with esc_url_raw()
+ * - User input is sanitized with appropriate WordPress functions
+ * - Reset keys are generated and validated by WordPress core
+ * - Activation keys are 20-character random strings with 24-hour expiry
+ *
+ * ADMIN NOTIFICATIONS (v2.1.0+)
+ * ==============================
+ * When enabled in settings, admins receive notifications for:
+ * - New user registrations (both password-provided and activation flows)
+ * - Contains user details and registration timestamp
+ * - Sent to site admin email (get_option('admin_email'))
+ * - Uses custom template from settings
  *
  * @package Custom_Secure_Auth
  * @since 2.0.0
+ * @version 2.1.0
  */
 
 // Exit if accessed directly
@@ -16,16 +67,16 @@ if (!defined('ABSPATH')) {
 /**
  * CSA_Email_Manager Class
  *
- * Manages all email-related functionality including:
- * - Custom email templates
- * - WordPress password reset email customization
- * - Activation email handling
- * - Proper HTML email formatting
+ * Centralized email management for all plugin email communications.
+ * Handles template loading, variable replacement, and WordPress filter integration.
  */
 class CSA_Email_Manager {
 
     /**
-     * Plugin settings
+     * Plugin settings array
+     *
+     * Cached from WordPress options for performance.
+     * Contains email templates, subjects, and configuration.
      *
      * @var array
      */
@@ -34,7 +85,8 @@ class CSA_Email_Manager {
     /**
      * Constructor
      *
-     * Initializes the email manager and hooks into WordPress filters
+     * Initializes the email manager and registers WordPress filter hooks.
+     * Settings are loaded once and cached in memory.
      */
     public function __construct() {
         $this->settings = get_option(CSA_SETTINGS_SLUG, array());
@@ -43,13 +95,19 @@ class CSA_Email_Manager {
 
     /**
      * Initialize WordPress hooks
+     *
+     * Registers filters to intercept and customize WordPress email behavior.
+     * Priority 10 for password reset customization.
+     * Priority 999 for content-type to ensure it runs last.
      */
     private function init_hooks() {
-        // Hook into WordPress password reset email
+        // WordPress password reset email customization
+        // These filters fire when retrieve_password() is called
         add_filter('retrieve_password_message', array($this, 'customize_password_reset_message'), 10, 4);
         add_filter('retrieve_password_title', array($this, 'customize_password_reset_subject'), 10, 3);
 
-        // Ensure HTML emails are sent properly
+        // HTML email content type
+        // Priority 999 ensures this runs after other plugins
         add_filter('wp_mail_content_type', array($this, 'maybe_set_html_content_type'), 999);
     }
 
@@ -503,7 +561,33 @@ class CSA_Email_Manager {
     /**
      * Send admin notification email when new user registers
      *
-     * @param int $user_id User ID
+     * New feature in v2.1.0 - Notifies site administrator when users register.
+     * This helps admins monitor new signups and detect suspicious activity.
+     *
+     * Email Flow:
+     * -----------
+     * 1. Check if admin notifications are enabled in settings
+     * 2. Get user data and format registration date with timezone handling
+     * 3. Load custom template and subject from settings
+     * 4. Replace template variables with actual user data
+     * 5. Send to admin email (get_option('admin_email'))
+     *
+     * Template Variables Available:
+     * -----------------------------
+     * - {user_login}: Username (login name)
+     * - {user_email}: User's email address
+     * - {user_name}: Display name or username fallback
+     * - {registration_date}: Formatted registration timestamp
+     * - {site_name}: WordPress site title
+     *
+     * Timezone Handling:
+     * ------------------
+     * Registration date uses WordPress timezone setting (Settings > General)
+     * Format: Y-m-d H:i:s (e.g., "2025-02-10 14:30:45")
+     * Falls back to current_time() if user registration date unavailable
+     *
+     * @since 2.1.0
+     * @param int $user_id Newly registered user ID
      * @return bool Whether the email was sent successfully
      */
     public function send_admin_registration_notification($user_id) {

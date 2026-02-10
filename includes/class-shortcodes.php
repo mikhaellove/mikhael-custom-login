@@ -2,10 +2,115 @@
 /**
  * Shortcodes Class
  *
- * Handles all shortcode registrations and rendering for Custom Secure Auth
+ * Handles all shortcode registrations and form rendering for Custom Secure Auth.
+ * This class is responsible for generating the HTML for all authentication forms
+ * and integrating them with the REST API security layer.
+ *
+ * SHORTCODE ARCHITECTURE
+ * ======================
+ * All shortcodes follow a consistent pattern:
+ * 1. Check if page is properly mapped in settings
+ * 2. Load plugin settings and configuration
+ * 3. Generate HTML form with proper structure
+ * 4. Inject HMAC security token via JavaScript
+ * 5. Add honeypot field (if enabled)
+ * 6. Handle messages (success/error via transients)
+ * 7. Submit to REST API endpoint
+ *
+ * AVAILABLE SHORTCODES
+ * ====================
+ *
+ * [auth_login]
+ * - Displays login form
+ * - Fields: username, password, remember me
+ * - Submits to: /custom-secure-auth/v1/login
+ * - Checks for activation_pending flag
+ * - Shows logout success message (if just logged out)
+ *
+ * [auth_register]
+ * - Displays registration form built from Grid Builder config
+ * - Dynamically generates fields based on admin settings
+ * - Supports: username (with fun generator), email, password, first/last name, custom fields
+ * - Submits to: /custom-secure-auth/v1/register
+ * - Hybrid system: password optional (triggers activation email if omitted)
+ *
+ * [auth_lost_password]
+ * - Displays password recovery form
+ * - Field: username or email
+ * - Submits to: /custom-secure-auth/v1/lost-password
+ * - Always returns generic success (zero-enumeration)
+ *
+ * [auth_set_password]
+ * - Displays password setting form
+ * - Used for both activation AND password reset
+ * - Gets key and login from URL parameters
+ * - Fields: new password, confirm password
+ * - Submits to: /custom-secure-auth/v1/set-password
+ * - Shows password strength indicator
+ *
+ * [auth_button]
+ * - Dynamic button that shows different links based on login state
+ * - Logged out: Shows "Login" and "Register" links
+ * - Logged in: Shows "Logout" link
+ * - Uses page mapping from settings
+ *
+ * TOKEN INJECTION SYSTEM
+ * ======================
+ * All forms use JavaScript to fetch and inject HMAC tokens before submission:
+ *
+ * 1. Form loads with placeholder token field
+ * 2. JavaScript fetches token from: /custom-secure-auth/v1/get-token
+ * 3. Token is HMAC-SHA256(IP + timestamp + AUTH_KEY)
+ * 4. Token and timestamp injected into hidden form fields
+ * 5. Form submitted with valid token
+ * 6. REST handler validates token (checks IP match and expiry)
+ *
+ * This approach ensures:
+ * - Tokens are always fresh (not cached in HTML)
+ * - Each token is unique per IP and time
+ * - Tokens expire after configured duration (default: 30 minutes)
+ * - Cannot be reused across different IPs
+ *
+ * GRID BUILDER INTEGRATION
+ * ========================
+ * Registration form uses Grid Builder configuration to dynamically render fields:
+ *
+ * Field Types Supported:
+ * - text: Basic text input (username, custom fields)
+ * - email: Email input with HTML5 validation
+ * - password: Password input with strength indicator
+ * - wp_first_name: WordPress first name (saved to user profile)
+ * - wp_last_name: WordPress last name (saved to user profile)
+ * - usermeta: Custom user meta (phone, company, etc.)
+ *
+ * Field Configuration:
+ * - Width: 33%, 50%, or 100% (CSS grid)
+ * - Required: Boolean flag
+ * - Placeholder: Custom placeholder text
+ * - Label: Field label
+ * - Order: Sortable via drag-and-drop in admin
+ *
+ * HONEYPOT SYSTEM
+ * ===============
+ * All forms include a hidden honeypot field (if enabled in settings):
+ * - Field name: "csa_website"
+ * - Hidden via CSS (display: none)
+ * - Bots auto-fill all fields, including hidden ones
+ * - Server-side validation rejects if field has any value
+ * - Humans never see or interact with this field
+ *
+ * SECURITY FEATURES
+ * =================
+ * - All output is escaped with esc_html(), esc_attr(), esc_url()
+ * - HMAC tokens instead of WordPress nonces
+ * - Honeypot bot detection
+ * - Rate limiting via REST handler
+ * - Generic error messages (zero-enumeration)
+ * - CSRF protection via referer validation
  *
  * @package Custom_Secure_Auth
  * @since 2.0.0
+ * @version 2.1.0
  */
 
 // Exit if accessed directly
@@ -16,12 +121,19 @@ if (!defined('ABSPATH')) {
 /**
  * CSA_Shortcodes Class
  *
- * Registers and handles all authentication-related shortcodes
+ * Manages shortcode registration and form HTML generation.
+ * Integrates with REST API handler for secure form submission.
  */
 class CSA_Shortcodes {
 
     /**
-     * Plugin settings
+     * Plugin settings array
+     *
+     * Contains all configuration including:
+     * - Page mappings
+     * - Grid builder configuration
+     * - Security settings
+     * - Email templates
      *
      * @var array
      */
@@ -30,12 +142,12 @@ class CSA_Shortcodes {
     /**
      * Constructor
      *
-     * Registers all shortcodes
+     * Loads settings and registers all authentication shortcodes.
      */
     public function __construct() {
         $this->settings = $this->get_settings();
 
-        // Register all shortcodes
+        // Register all authentication shortcodes
         add_shortcode('auth_login', array($this, 'render_login_form'));
         add_shortcode('auth_register', array($this, 'render_register_form'));
         add_shortcode('auth_lost_password', array($this, 'render_lost_password_form'));
