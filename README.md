@@ -1,6 +1,6 @@
 # Mikhael's Custom Secure Auth
 
-![Version](https://img.shields.io/badge/version-2.0.1-blue.svg)
+![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)
 ![WordPress](https://img.shields.io/badge/WordPress-5.0%2B-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-GPL--2.0%2B-orange.svg)
 
@@ -41,6 +41,8 @@ This plugin is provided "as is" without warranty of any kind, express or implied
 - Any damages, direct or indirect, arising from the use of this plugin
 
 **Security is a shared responsibility.** This plugin provides tools and features to enhance your WordPress authentication security, but it cannot guarantee complete protection against all threats. Always follow security best practices and consult with security professionals for high-risk environments.
+
+**Documentation Notice:** While I strive to keep this README current, features may be added, modified, or removed during active development. This documentation reflects the general capabilities and philosophy of the plugin, but may not comprehensively detail every feature or reflect all recent changes. For the most accurate feature list, please review the plugin settings interface or examine the source code directly.
 
 ## Core Philosophy
 
@@ -84,6 +86,13 @@ This plugin is provided "as is" without warranty of any kind, express or implied
 - IP-based tracking with Cloudflare support
 - Automatic IP release after lockout expires
 
+**Session Management**
+- Role-based session expiration control
+- Global default session length (default: 48 hours)
+- Per-role session overrides for granular control
+- Minimum 1-hour session to prevent lockout loops
+- Applies to both standard and "Remember Me" logins
+
 ### Form Builder & Customization
 
 **Visual Grid-Based Form Builder**
@@ -97,9 +106,10 @@ This plugin is provided "as is" without warranty of any kind, express or implied
 
 **Custom Email Templates**
 - HTML email support
-- Template variables: `{user_name}`, `{site_name}`, `{set_password_url}`, `{user_email}`
+- Template variables: `{user_name}`, `{site_name}`, `{set_password_url}`, `{user_email}`, `{user_login}`, `{registration_date}`
 - Separate templates for activation and password recovery
-- Custom subject lines
+- Admin notification emails for new registrations
+- Custom subject lines for all email types
 
 **Username Policy Enforcement**
 - Reserved words list (admin, root, moderator, etc.)
@@ -157,8 +167,10 @@ This plugin is provided "as is" without warranty of any kind, express or implied
 **Integration Features**
 - Tracks last login time (displayed in user table)
 - Custom user columns in admin panel
+- Frontend profile editor with shortcode support
 - Works with governance logging (content restrictions plugin)
 - Compatible with `[registration_tos_interceptor]` shortcode
+- Admin notification system for new user registrations
 
 ## Installation
 
@@ -185,6 +197,7 @@ This plugin is provided "as is" without warranty of any kind, express or implied
 [auth_lost_password]   - Password recovery form
 [auth_set_password]    - Password reset/activation form
 [auth_button]          - Dynamic auth button (login/logout/register links)
+[auth_profile_editor]  - Frontend user profile editor
 ```
 
 ## Configuration Guide
@@ -212,6 +225,11 @@ Navigate to **Settings > Secure Auth > Security**
 - Honeypot Protection (enabled by default)
 - Max Failed Attempts (default: 5)
 - Lockout Duration (default: 1 hour)
+
+**Session Management:**
+- Global Default Session Length (default: 48 hours)
+- Role-Based Session Overrides (custom expiration per role)
+- Applies to both standard and "Remember Me" sessions
 
 **reCAPTCHA v3:**
 - Site Key (from Google reCAPTCHA admin)
@@ -287,11 +305,23 @@ Body: <p>Hello {user_name},</p>
       <p><a href="{set_password_url}">Reset Password</a></p>
 ```
 
+**Admin Notification Email:**
+```
+Subject: New User Registration - {site_name}
+Body: <p>A new user has registered on {site_name}:</p>
+      <p><strong>Username:</strong> {user_login}<br>
+         <strong>Email:</strong> {user_email}<br>
+         <strong>Display Name:</strong> {user_name}<br>
+         <strong>Registration Date:</strong> {registration_date}</p>
+```
+
 **Available Variables:**
-- `{user_name}` - Username
+- `{user_name}` - Display name or username
+- `{user_login}` - Username (login name)
 - `{user_email}` - Email address
 - `{site_name}` - WordPress site title
 - `{set_password_url}` - Activation or reset link (includes key and login)
+- `{registration_date}` - User registration date and time (for admin notifications)
 
 ## Technical Details
 
@@ -366,6 +396,13 @@ Body: <p>Hello {user_name},</p>
 - `csa_activation_key` - 20-character random key
 - `csa_activation_key_expiry` - Unix timestamp (24 hours from creation)
 - `csa_last_login` - Unix timestamp (updated via `set_auth_cookie` hook)
+
+**Security Settings:**
+- `session_expiration_global_default` - Global session length in hours (default: 48)
+- `session_expiration_role_overrides` - Array of role => hours mappings
+- `admin_notification_enabled` - Boolean flag for admin registration notifications
+- `admin_notification_subject` - Subject line for admin notifications
+- `admin_notification_template` - HTML template for admin notifications
 
 ## Use Cases
 
@@ -640,7 +677,27 @@ Call `$this->log_security_event($event_type, $ip, $data)` from within REST handl
 
 ## Changelog
 
-### Version 2.0.1 (Current)
+### Version 2.1.0 (Current)
+
+**Added:**
+- Role-based session expiration control
+- Global default session length configuration
+- Per-role session duration overrides
+- Admin notification system for new user registrations
+- Custom email template for admin registration notifications
+- Frontend profile editor with `[auth_profile_editor]` shortcode
+- Additional email template variables: `{user_login}`, `{registration_date}`
+
+**Improved:**
+- Session management now applies to both standard and "Remember Me" logins
+- Enhanced email system with admin notification support
+- Better timezone handling for registration dates in emails
+
+**Version Bump:**
+- Updated plugin version to 2.1.0
+- Updated documentation to reflect new features
+
+### Version 2.0.1
 
 **Added:**
 - XML-RPC blocking with standard 404 response
