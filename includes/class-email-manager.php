@@ -534,12 +534,16 @@ class CSA_Email_Manager {
         $template = isset($emails['admin_notification_template']) ? $emails['admin_notification_template'] : '<p>A new user has registered on {site_name}:</p><p><strong>Username:</strong> {user_login}<br><strong>Email:</strong> {user_email}<br><strong>Display Name:</strong> {user_name}<br><strong>Registration Date:</strong> {registration_date}</p>';
 
         // Prepare placeholders (pre-sanitized for security)
+        // Convert registration date from GMT to site timezone
+        $date_format = get_option('date_format') . ' ' . get_option('time_format');
+        $registration_timestamp = strtotime(get_date_from_gmt($user->user_registered));
+
         $placeholders = array(
             'user_name' => esc_html($this->get_user_display_name($user)),
             'site_name' => esc_html($this->get_site_name()),
             'user_email' => esc_html($user->user_email),
             'user_login' => esc_html($user->user_login),
-            'registration_date' => esc_html(date_i18n(get_option('date_format') . ' ' . get_option('time_format'), strtotime($user->user_registered))),
+            'registration_date' => esc_html(date_i18n($date_format, $registration_timestamp)),
         );
 
         // Send email
