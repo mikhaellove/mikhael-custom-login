@@ -265,10 +265,20 @@ class CSA_Rest_Handler extends WP_REST_Controller {
 
     /**
      * Generate HMAC token
+     *
+     * @throws Exception if AUTH_KEY is not properly configured
      */
     private function generate_timed_token($ip, $timestamp) {
-        $secret = defined('AUTH_KEY') ? AUTH_KEY : 'csa_default_secret';
-        return hash_hmac('sha256', $ip . $timestamp, $secret);
+        // Require AUTH_KEY - fail securely if not defined or using default WordPress value
+        if (!defined('AUTH_KEY') || empty(AUTH_KEY) || AUTH_KEY === 'put your unique phrase here') {
+            // Log critical error
+            error_log('CRITICAL: AUTH_KEY not properly configured in wp-config.php. Custom Secure Auth authentication disabled.');
+
+            // Throw exception to completely block authentication
+            throw new Exception(__('Security configuration error. Please contact site administrator.', 'custom-secure-auth'));
+        }
+
+        return hash_hmac('sha256', $ip . $timestamp, AUTH_KEY);
     }
 
     /**
@@ -742,11 +752,23 @@ class CSA_Rest_Handler extends WP_REST_Controller {
      *
      * Generates a fun username if the feature is enabled in settings.
      * Returns 403 error if feature is disabled.
+     * Applies IP-based rate limiting to prevent resource exhaustion.
      *
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response with generated username or error
      */
     public function handle_generate_username($request) {
+        // Apply IP rate limiting (reuse existing lockout check)
+        $ip = $this->get_user_ip();
+        if (get_transient('auth_block_' . md5($ip))) {
+            $this->log_security_event('blocked_ip', $ip, array('endpoint' => 'generate-username'));
+            return new WP_Error(
+                'csa_blocked',
+                __('Too many requests. Please try again later.', 'custom-secure-auth'),
+                array('status' => 429)
+            );
+        }
+
         $settings = $this->settings;
         $fun_username_enabled = isset($settings['grid_builder']['fun_username_enabled']) ? $settings['grid_builder']['fun_username_enabled'] : false;
 
@@ -897,6 +919,9 @@ class CSA_Rest_Handler extends WP_REST_Controller {
 
     /**
      * Get redirect URL after login
+     *
+     * Validates redirect_to parameter to prevent open redirect attacks.
+     * Only allows redirects to the same domain as the site.
      */
     private function get_redirect_url() {
         $global_config = isset($this->settings['global_config']) ? $this->settings['global_config'] : array();
@@ -912,9 +937,25 @@ class CSA_Rest_Handler extends WP_REST_Controller {
             $redirect_url = home_url();
         }
 
-        // Allow redirect parameter override
+        // Allow redirect parameter override BUT validate it's a local URL
         if (!empty($_GET['redirect_to'])) {
-            $redirect_url = esc_url_raw($_GET['redirect_to']);
+            $requested_redirect = esc_url_raw($_GET['redirect_to']);
+
+            // Validate it's a local URL (same host as site)
+            $requested_host = parse_url($requested_redirect, PHP_URL_HOST);
+            $site_host = parse_url(home_url(), PHP_URL_HOST);
+
+            // Only allow redirect if:
+            // 1. No host specified (relative URL like /my-page)
+            // 2. Host matches site host
+            if (empty($requested_host) || $requested_host === $site_host) {
+                $redirect_url = $requested_redirect;
+            } else {
+                // Log potential open redirect attack attempt
+                $this->log_security_event('open_redirect_blocked', $this->get_user_ip(), array(
+                    'attempted_redirect' => $requested_redirect,
+                ));
+            }
         }
 
         return $redirect_url;

@@ -231,9 +231,9 @@ class Custom_Secure_Auth {
         );
 
         // Localize script with REST API data
+        // Note: We use HMAC-based tokens (not WordPress nonces) for security validation
         wp_localize_script('csa-scripts', 'csaData', array(
             'restUrl' => rest_url('custom-secure-auth/v1'),
-            'nonce' => wp_create_nonce('wp_rest'),
             'siteUrl' => get_site_url(),
         ));
     }
@@ -536,7 +536,7 @@ class Custom_Secure_Auth {
         // Return standard 404 response and exit
         status_header(404);
         nocache_headers();
-        exit;
+        return false;
     }
 
     /**
