@@ -175,6 +175,12 @@ This plugin is provided "as is" without warranty of any kind, express or implied
 - Compatible with `[registration_tos_interceptor]` shortcode
 - Admin notification system for new user registrations
 
+**Multisite Features**
+- Option to hide "My Sites" menu from admin bar for non-admin users
+- Administrators and editors retain access to "My Sites"
+- Configurable per-site in multisite installations
+- Settings only appear when multisite is active
+
 ## Installation
 
 ### Standard Installation
@@ -327,6 +333,30 @@ Navigate to **Settings > Secure Auth > Username Policy**
 - Generic violation message: "Username contains content that goes against my guidelines"
 - Prevents attackers from testing content filter rules
 - Consistent error format with other registration failures
+
+### Profile Editor Settings
+
+Navigate to **Settings > Secure Auth > Profile Editor**
+
+**Page Configuration:**
+- Profile Page (where `[frontend_profile]` shortcode is placed)
+- Non-admin users redirected here from wp-admin profile page
+
+**Profile Fields:**
+- Enable/disable: Bio, Display Name, Website, Language Selection
+- Member Directory visibility toggle
+- Default visibility for new users
+
+**Language Settings:**
+- Allow users to select preferred language
+- Default language for users without preference
+- Integrates with WordPress locale system
+- GTranslate automatic language switching (if plugin active)
+
+**Multisite Settings** (only appears on multisite installations):
+- Hide "My Sites" from Admin Bar - Removes the "My Sites" menu for non-admin users
+- Administrators and editors will still see the menu
+- Helps simplify the admin bar for regular users who don't need multisite navigation
 
 ### Email Templates
 
@@ -534,6 +564,7 @@ Users can register and access content while maintaining complete anonymity. User
 **Known Integrations:**
 - **mikhael-content-restrictions**: Governance logging for authentication events (optional companion plugin)
 - **mikhael-shadow-mode**: Respects shadow mode event logging filters (optional companion plugin)
+- **WordPress Multisite**: Full multisite support with admin bar customization
 - WordPress core authentication hooks
 - Standard WordPress user management systems
 

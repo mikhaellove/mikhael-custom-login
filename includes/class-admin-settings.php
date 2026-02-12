@@ -431,6 +431,7 @@ class CSA_Admin_Settings {
         $settings['profile_editor']['default_language'] = isset($_POST['default_language']) ? sanitize_text_field($_POST['default_language']) : 'en_US';
         $settings['profile_editor']['enable_member_directory'] = isset($_POST['enable_member_directory']) ? true : false;
         $settings['profile_editor']['default_show_in_directory'] = isset($_POST['default_show_in_directory']) ? true : false;
+        $settings['profile_editor']['hide_my_sites'] = isset($_POST['hide_my_sites']) ? true : false;
 
         return $settings;
     }
@@ -3047,6 +3048,30 @@ class CSA_Admin_Settings {
                 </tr>
             </tbody>
         </table>
+
+        <?php if (is_multisite()) : ?>
+        <h2><?php esc_html_e('Multisite Settings', 'custom-secure-auth'); ?></h2>
+        <p><?php esc_html_e('Configure multisite-specific profile settings.', 'custom-secure-auth'); ?></p>
+
+        <table class="form-table csa-form-table">
+            <tbody>
+                <tr>
+                    <th scope="row">
+                        <label for="hide_my_sites"><?php esc_html_e('Hide "My Sites" from Admin Bar', 'custom-secure-auth'); ?></label>
+                    </th>
+                    <td>
+                        <label class="csa-toggle">
+                            <input type="checkbox" name="hide_my_sites" id="hide_my_sites" value="1" <?php checked(!empty($profile['hide_my_sites'])); ?>>
+                            <span class="csa-toggle-slider"></span>
+                        </label>
+                        <p class="description">
+                            <?php esc_html_e('If enabled, the "My Sites" menu will be removed from the admin bar for non-admin users. Administrators and editors will still see the menu.', 'custom-secure-auth'); ?>
+                        </p>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        <?php endif; ?>
 
         <h2><?php esc_html_e('Language Settings', 'custom-secure-auth'); ?></h2>
         <p><?php esc_html_e('Allow users to select their preferred language for the frontend.', 'custom-secure-auth'); ?></p>

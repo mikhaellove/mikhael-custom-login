@@ -53,6 +53,11 @@
  *    - Prevents access to backend profile editor
  *    - Redirects to configured frontend profile page
  *
+ * 7. Multisite Admin Bar Control
+ *    - Option to hide "My Sites" menu from admin bar
+ *    - Configurable per-site in multisite installations
+ *    - Only appears in settings when multisite is active
+ *
  * SECURITY CONSIDERATIONS
  * =======================
  * - WordPress nonces for form validation
@@ -140,6 +145,9 @@ class CSA_Profile_Editor {
 
         // Enqueue assets
         add_action('wp_enqueue_scripts', array($this, 'enqueue_assets'));
+
+        // Hide "My Sites" from admin bar if enabled
+        add_action('admin_bar_menu', array($this, 'hide_my_sites_from_admin_bar'), 999);
     }
 
     /**
@@ -793,5 +801,36 @@ class CSA_Profile_Editor {
             });
         </script>
         <?php
+    }
+
+    /**
+     * Hide "My Sites" from admin bar
+     *
+     * Removes the "My Sites" menu from the WordPress admin bar when enabled
+     * in the plugin settings. This only applies to multisite installations and
+     * does not affect administrators or editors.
+     *
+     * @since 2.1.0
+     * @param WP_Admin_Bar $wp_admin_bar The WP_Admin_Bar instance
+     * @return void
+     */
+    public function hide_my_sites_from_admin_bar($wp_admin_bar) {
+        // Only applicable for multisite installations
+        if (!is_multisite()) {
+            return;
+        }
+
+        // Don't hide for administrators or editors
+        if (current_user_can('manage_options') || current_user_can('edit_pages')) {
+            return;
+        }
+
+        // Get profile settings
+        $options = $this->get_profile_settings();
+
+        // Check if hiding "My Sites" is enabled
+        if (!empty($options['hide_my_sites'])) {
+            $wp_admin_bar->remove_node('my-sites');
+        }
     }
 }
