@@ -127,6 +127,7 @@ class CSA_Admin_Settings {
             'global_config' => array(
                 'token_expiry' => 30,
                 'redirect_after_login' => 0,
+                'redirect_to_referrer_roles' => array(),
                 'disable_auto_login_after_reset' => false,
                 'button_css_classes' => 'btn btn-primary',
             ),
@@ -289,6 +290,14 @@ class CSA_Admin_Settings {
         // Global config
         $settings['global_config']['token_expiry'] = isset($_POST['token_expiry']) ? absint($_POST['token_expiry']) : 30;
         $settings['global_config']['redirect_after_login'] = isset($_POST['redirect_after_login']) ? absint($_POST['redirect_after_login']) : 0;
+
+        // Sanitize redirect_to_referrer_roles as array of role slugs
+        if (isset($_POST['redirect_to_referrer_roles']) && is_array($_POST['redirect_to_referrer_roles'])) {
+            $settings['global_config']['redirect_to_referrer_roles'] = array_map('sanitize_key', $_POST['redirect_to_referrer_roles']);
+        } else {
+            $settings['global_config']['redirect_to_referrer_roles'] = array();
+        }
+
         $settings['global_config']['disable_auto_login_after_reset'] = isset($_POST['disable_auto_login_after_reset']) ? true : false;
         $settings['global_config']['button_css_classes'] = isset($_POST['button_css_classes']) ? sanitize_text_field($_POST['button_css_classes']) : '';
 
@@ -687,6 +696,37 @@ class CSA_Admin_Settings {
                         ));
                         ?>
                         <span class="description"><?php esc_html_e('Select the page to redirect users after successful login. Leave as "Home Page" to use the site homepage.', 'custom-secure-auth'); ?></span>
+                    </td>
+                </tr>
+
+                <tr>
+                    <th scope="row">
+                        <label><?php esc_html_e('Redirect to Original Page (by Role)', 'custom-secure-auth'); ?></label>
+                    </th>
+                    <td>
+                        <?php
+                        // Get all WordPress roles
+                        global $wp_roles;
+                        if (!isset($wp_roles)) {
+                            $wp_roles = new WP_Roles();
+                        }
+                        $all_roles = $wp_roles->get_names();
+                        $selected_roles = isset($settings['global_config']['redirect_to_referrer_roles']) ? $settings['global_config']['redirect_to_referrer_roles'] : array();
+
+                        foreach ($all_roles as $role_slug => $role_name) :
+                            $checked = in_array($role_slug, $selected_roles);
+                        ?>
+                            <label style="display: block; margin-bottom: 5px;">
+                                <input
+                                    type="checkbox"
+                                    name="redirect_to_referrer_roles[]"
+                                    value="<?php echo esc_attr($role_slug); ?>"
+                                    <?php checked($checked); ?>
+                                >
+                                <?php echo esc_html($role_name); ?>
+                            </label>
+                        <?php endforeach; ?>
+                        <span class="description"><?php esc_html_e('Select which roles should be redirected back to the page they were on when they clicked login. Unchecked roles will use the "Redirect After Login" page above.', 'custom-secure-auth'); ?></span>
                     </td>
                 </tr>
 
@@ -2120,6 +2160,39 @@ class CSA_Admin_Settings {
                     <strong><?php esc_html_e('Examples:', 'custom-secure-auth'); ?></strong>
                     <p><code>[auth_button action="logout" text="Sign Out"]</code></p>
                     <p><code>[auth_button action="logout" text="Log Out" class="logout-btn"]</code></p>
+                </div>
+            </div>
+
+            <!-- Continue Browsing Button -->
+            <div class="csa-shortcode-card">
+                <div class="csa-shortcode-header">
+                    <h3><span class="dashicons dashicons-redo"></span> <?php esc_html_e('Continue Browsing Button', 'custom-secure-auth'); ?></h3>
+                    <button type="button" class="button button-small csa-copy-btn" data-shortcode='[auth_continue]'>
+                        <span class="dashicons dashicons-clipboard"></span> <?php esc_html_e('Copy', 'custom-secure-auth'); ?>
+                    </button>
+                </div>
+                <div class="csa-shortcode-code">
+                    <code>[auth_continue]</code>
+                </div>
+                <p class="csa-shortcode-description">
+                    <?php esc_html_e('Displays a button that redirects users back to the page they were viewing before they logged in. Only visible to logged-in users and only if a referrer was captured (expires after 24 hours). Perfect for post-login promotional pages where you want to give users the option to continue browsing.', 'custom-secure-auth'); ?>
+                </p>
+                <div class="csa-shortcode-attributes">
+                    <strong><?php esc_html_e('Attributes:', 'custom-secure-auth'); ?></strong>
+                    <ul>
+                        <li><code>text</code> - <?php esc_html_e('Custom button text (default: "Enter Site")', 'custom-secure-auth'); ?></li>
+                        <li><code>class</code> - <?php esc_html_e('Additional CSS classes for styling', 'custom-secure-auth'); ?></li>
+                    </ul>
+                </div>
+                <div class="csa-shortcode-example">
+                    <strong><?php esc_html_e('Examples:', 'custom-secure-auth'); ?></strong>
+                    <p><code>[auth_continue]</code></p>
+                    <p><code>[auth_continue text="Continue Browsing"]</code></p>
+                    <p><code>[auth_continue text="Skip" class="secondary-button"]</code></p>
+                </div>
+                <div class="csa-info-box" style="margin-top: 15px;">
+                    <strong><?php esc_html_e('Use Case:', 'custom-secure-auth'); ?></strong>
+                    <p><?php esc_html_e('Use this on your post-login redirect page (e.g., an upgrade promotion page). Users who don\'t want to upgrade can click this button to return to where they left off before logging in.', 'custom-secure-auth'); ?></p>
                 </div>
             </div>
 

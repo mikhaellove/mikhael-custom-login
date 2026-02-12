@@ -153,6 +153,7 @@ class CSA_Shortcodes {
         add_shortcode('auth_lost_password', array($this, 'render_lost_password_form'));
         add_shortcode('auth_set_password', array($this, 'render_set_password_form'));
         add_shortcode('auth_button', array($this, 'render_auth_button'));
+        add_shortcode('auth_continue', array($this, 'render_continue_button'));
     }
 
     /**
@@ -278,11 +279,50 @@ class CSA_Shortcodes {
     public function render_login_form($atts) {
         // Redirect if already logged in
         if (is_user_logged_in()) {
-            $redirect_url = isset($this->settings['global_config']['redirect_after_login'])
+            $redirect_page_id = isset($this->settings['global_config']['redirect_after_login'])
                 ? $this->settings['global_config']['redirect_after_login']
-                : home_url();
+                : 0;
+
+            // Get URL from page ID
+            if ($redirect_page_id) {
+                $redirect_url = get_permalink($redirect_page_id);
+                // Fallback to home if page doesn't exist or permalink fails
+                if (!$redirect_url) {
+                    $redirect_url = home_url();
+                }
+            } else {
+                $redirect_url = home_url();
+            }
+
+            // Prevent redirect loop: if redirect URL is the current page, go to home instead
+            $current_url = get_permalink();
+            if ($current_url && $redirect_url === $current_url) {
+                error_log('[CSA Redirect Debug] Prevented redirect loop on login page for logged-in user');
+                $redirect_url = home_url();
+            }
+
             wp_safe_redirect($redirect_url);
             exit;
+        }
+
+        // Capture HTTP_REFERER for redirect after login
+        // Store in session-based transient (using IP + user agent hash for anonymous users)
+        if (!empty($_SERVER['HTTP_REFERER'])) {
+            $referer = esc_url_raw($_SERVER['HTTP_REFERER']);
+
+            // Only store if referer is from same site
+            $referer_host = parse_url($referer, PHP_URL_HOST);
+            $site_host = parse_url(home_url(), PHP_URL_HOST);
+
+            if ($referer_host === $site_host) {
+                // Create a session identifier for anonymous users
+                $session_id = md5($_SERVER['REMOTE_ADDR'] . $_SERVER['HTTP_USER_AGENT']);
+                $transient_key = 'csa_login_referer_' . $session_id;
+
+                // Store for 10 minutes
+                set_transient($transient_key, $referer, 600);
+                error_log('[CSA Redirect Debug] Stored referer in transient: ' . $referer);
+            }
         }
 
         // Check for logout message transient
@@ -859,6 +899,91 @@ class CSA_Shortcodes {
                 break;
         }
 
+        return ob_get_clean();
+    }
+
+    /**
+     * Render [auth_continue] shortcode
+     *
+     * Displays a button/link to continue browsing from where user left off before login.
+     * Retrieves the last stored referrer from user meta (stored during login).
+     *
+     * Usage: [auth_continue text="Continue Browsing" class="my-button-class"]
+     *
+     * @param array $atts Shortcode attributes
+     * @return string HTML for continue button
+     */
+    public function render_continue_button($atts) {
+        // Parse shortcode attributes
+        $atts = shortcode_atts(array(
+            'text' => 'Enter Site',
+            'class' => '',
+        ), $atts);
+
+        $button_text = !empty($atts['text']) ? esc_html($atts['text']) : 'Enter Site';
+        $custom_class = !empty($atts['class']) ? esc_attr($atts['class']) : '';
+        $button_classes = $this->get_button_classes() . ' ' . $custom_class;
+
+        // Only show for logged in users
+        if (!is_user_logged_in()) {
+            return '';
+        }
+
+        $current_user = wp_get_current_user();
+
+        // Get stored referrer from user meta
+        $stored_referrer = get_user_meta($current_user->ID, 'csa_last_referrer', true);
+        $referrer_time = get_user_meta($current_user->ID, 'csa_last_referrer_time', true);
+
+        // Check if referrer exists and is less than 24 hours old
+        if (empty($stored_referrer) || empty($referrer_time)) {
+            error_log('[CSA Continue Button] No stored referrer found for user ID ' . $current_user->ID);
+            return '';
+        }
+
+        // Check if referrer is expired (24 hours)
+        $referrer_age = time() - intval($referrer_time);
+        if ($referrer_age > (24 * HOUR_IN_SECONDS)) {
+            error_log('[CSA Continue Button] Stored referrer expired for user ID ' . $current_user->ID);
+            // Clean up expired user meta
+            delete_user_meta($current_user->ID, 'csa_last_referrer');
+            delete_user_meta($current_user->ID, 'csa_last_referrer_time');
+            return '';
+        }
+
+        // Validate referrer is from same domain (defense in depth)
+        $referrer_host = parse_url($stored_referrer, PHP_URL_HOST);
+        $site_host = parse_url(home_url(), PHP_URL_HOST);
+
+        if ($referrer_host !== $site_host) {
+            error_log('[CSA Continue Button] Referrer host mismatch for user ID ' . $current_user->ID);
+            // Clean up invalid referrer
+            delete_user_meta($current_user->ID, 'csa_last_referrer');
+            delete_user_meta($current_user->ID, 'csa_last_referrer_time');
+            return '';
+        }
+
+        // Check if referrer is one of the auth pages - if so, don't show the button
+        $page_mapping = isset($this->settings['page_mapping']) ? $this->settings['page_mapping'] : array();
+        $auth_page_ids = array(
+            isset($page_mapping['login_page']) ? $page_mapping['login_page'] : 0,
+            isset($page_mapping['register_page']) ? $page_mapping['register_page'] : 0,
+            isset($page_mapping['lost_password_page']) ? $page_mapping['lost_password_page'] : 0,
+            isset($page_mapping['set_password_page']) ? $page_mapping['set_password_page'] : 0,
+        );
+
+        $referrer_page_id = url_to_postid($stored_referrer);
+        if (in_array($referrer_page_id, $auth_page_ids, true) && $referrer_page_id !== 0) {
+            error_log('[CSA Continue Button] Referrer is an auth page for user ID ' . $current_user->ID);
+            return '';
+        }
+
+        ob_start();
+        ?>
+        <a href="<?php echo esc_url($stored_referrer); ?>" class="csa-auth-button csa-continue-button <?php echo esc_attr($button_classes); ?>">
+            <?php echo esc_html($button_text); ?>
+        </a>
+        <?php
         return ob_get_clean();
     }
 }

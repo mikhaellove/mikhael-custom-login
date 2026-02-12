@@ -1,6 +1,6 @@
 # Mikhael's Custom Secure Auth
 
-![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)
+![Version](https://img.shields.io/badge/version-2.2.0-blue.svg)
 ![WordPress](https://img.shields.io/badge/WordPress-5.0%2B-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-GPL--2.0%2B-orange.svg)
 
@@ -161,8 +161,11 @@ This plugin is provided "as is" without warranty of any kind, express or implied
 
 **Smart Redirects**
 - Configurable post-login redirect
+- Role-based referrer redirect (return to page before login)
+- Continue browsing button for post-login pages
 - Logout redirect to custom login page
 - Transient-based logout confirmation message
+- Automatic redirect loop prevention
 
 **Integration Features**
 - Tracks last login time (displayed in user table)
@@ -197,8 +200,31 @@ This plugin is provided "as is" without warranty of any kind, express or implied
 [auth_lost_password]   - Password recovery form
 [auth_set_password]    - Password reset/activation form
 [auth_button]          - Dynamic auth button (login/logout/register links)
+[auth_continue]        - Continue browsing button (returns to pre-login page)
 [auth_profile_editor]  - Frontend user profile editor
 ```
+
+### auth_continue Shortcode
+
+The `[auth_continue]` shortcode creates a button that redirects users back to the page they were viewing before they logged in. Perfect for post-login promotional pages.
+
+**Attributes:**
+- `text` - Button text (default: "Enter Site")
+- `class` - Additional CSS classes
+
+**Examples:**
+```
+[auth_continue]
+[auth_continue text="Continue Browsing"]
+[auth_continue text="Skip" class="secondary-button"]
+```
+
+**Behavior:**
+- Only visible to logged-in users
+- Only displays if a referrer was captured during login
+- Expires after 24 hours
+- Automatically excludes auth pages (login, register, etc.)
+- Validates same-domain to prevent redirect attacks
 
 ## Configuration Guide
 
@@ -214,8 +240,25 @@ Navigate to **Settings > Secure Auth > Page Mapping & Logic**
 
 **Additional Settings:**
 - Redirect after login (dropdown selector)
+- Redirect to original page by role (checkbox per role)
 - Token expiry duration (default: 30 minutes)
 - Auto-login after password reset (checkbox)
+
+**Role-Based Redirect Feature:**
+
+Configure which user roles should be redirected back to the page they were viewing before login:
+
+1. Check roles that should return to their previous page (e.g., Subscriber, Customer)
+2. Unchecked roles will use the "Redirect After Login" page setting
+3. Referrer is captured automatically when visiting the login page
+4. Works regardless of how users arrive at login (direct, links, back button)
+5. Automatically excludes auth pages to prevent loops
+6. Expires after 24 hours for security
+
+**Use Case Example:**
+- Subscribers → Check the box → Return to browsing after login
+- Administrators → Leave unchecked → Go to admin dashboard after login
+- Add `[auth_continue]` button to post-login pages for user choice
 
 ### Security Settings
 
@@ -396,6 +439,8 @@ Body: <p>A new user has registered on {site_name}:</p>
 - `csa_activation_key` - 20-character random key
 - `csa_activation_key_expiry` - Unix timestamp (24 hours from creation)
 - `csa_last_login` - Unix timestamp (updated via `set_auth_cookie` hook)
+- `csa_last_referrer` - URL user was viewing before login (for `[auth_continue]` shortcode)
+- `csa_last_referrer_time` - Unix timestamp for referrer expiration (24 hours)
 
 **Security Settings:**
 - `session_expiration_global_default` - Global session length in hours (default: 48)
@@ -677,7 +722,33 @@ Call `$this->log_security_event($event_type, $ip, $data)` from within REST handl
 
 ## Changelog
 
-### Version 2.1.0 (Current)
+### Version 2.2.0 (Current)
+
+**Added:**
+- Role-based referrer redirect system (return to page before login)
+- `[auth_continue]` shortcode for "continue browsing" buttons
+- Configurable redirect behavior by user role
+- Transient-based referrer capture with 24-hour expiration
+- HTTP_REFERER validation and same-domain security checks
+- Automatic exclusion of auth pages from referrer redirect
+
+**Security:**
+- Defense-in-depth URL validation (storage time + retrieval time)
+- Redirect loop prevention for logged-in users on login page
+- Session-based transient storage with IP + User-Agent hash
+- One-time transient use with immediate deletion after reading
+
+**Improved:**
+- Enhanced post-login redirect flexibility for granular user flow control
+- Better UX for promotional/upgrade pages with continue option
+- Fixed redirect loop bug when logged-in users visit login page
+
+**Use Cases:**
+- Show subscribers upgrade promotions after login with skip option
+- Different redirect behavior per role (admins to dashboard, users to content)
+- Seamless browsing experience with "return to where you left off" functionality
+
+### Version 2.1.0
 
 **Added:**
 - Role-based session expiration control
@@ -692,10 +763,6 @@ Call `$this->log_security_event($event_type, $ip, $data)` from within REST handl
 - Session management now applies to both standard and "Remember Me" logins
 - Enhanced email system with admin notification support
 - Better timezone handling for registration dates in emails
-
-**Version Bump:**
-- Updated plugin version to 2.1.0
-- Updated documentation to reflect new features
 
 ### Version 2.0.1
 

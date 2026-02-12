@@ -508,6 +508,19 @@ class CSA_Rest_Handler extends WP_REST_Controller {
         wp_set_current_user($user->ID);
         wp_set_auth_cookie($user->ID, $remember);
 
+        // Store referrer in user meta for [auth_continue] shortcode
+        // Check if there's a stored referrer in transient
+        $session_id = md5($this->get_user_ip() . $_SERVER['HTTP_USER_AGENT']);
+        $transient_key = 'csa_login_referer_' . $session_id;
+        $stored_referer = get_transient($transient_key);
+
+        if (!empty($stored_referer)) {
+            // Store in user meta for later use (expires after 24 hours via timestamp)
+            update_user_meta($user->ID, 'csa_last_referrer', $stored_referer);
+            update_user_meta($user->ID, 'csa_last_referrer_time', time());
+            error_log('[CSA Redirect Debug] Stored referrer in user meta for user ID ' . $user->ID);
+        }
+
         $this->log_security_event('login_success', $this->get_user_ip(), array(
             'user_id' => $user->ID,
             'username' => $username,
@@ -516,7 +529,7 @@ class CSA_Rest_Handler extends WP_REST_Controller {
         return rest_ensure_response(array(
             'success' => true,
             'message' => __('Login successful!', 'custom-secure-auth'),
-            'redirect_url' => $this->get_redirect_url(),
+            'redirect_url' => $this->get_redirect_url($request),
         ));
     }
 
@@ -922,8 +935,10 @@ class CSA_Rest_Handler extends WP_REST_Controller {
      *
      * Validates redirect_to parameter to prevent open redirect attacks.
      * Only allows redirects to the same domain as the site.
+     *
+     * @param WP_REST_Request|null $request Optional REST request object
      */
-    private function get_redirect_url() {
+    private function get_redirect_url($request = null) {
         $global_config = isset($this->settings['global_config']) ? $this->settings['global_config'] : array();
         $redirect_page_id = isset($global_config['redirect_after_login']) ? $global_config['redirect_after_login'] : 0;
 
@@ -937,25 +952,89 @@ class CSA_Rest_Handler extends WP_REST_Controller {
             $redirect_url = home_url();
         }
 
-        // Allow redirect parameter override BUT validate it's a local URL
-        if (!empty($_GET['redirect_to'])) {
-            $requested_redirect = esc_url_raw($_GET['redirect_to']);
+        // Check for stored referrer in transient
+        $session_id = md5($this->get_user_ip() . $_SERVER['HTTP_USER_AGENT']);
+        $transient_key = 'csa_login_referer_' . $session_id;
+        $stored_referer = get_transient($transient_key);
+
+        if (!empty($stored_referer)) {
+            error_log('[CSA Redirect Debug] Found stored referer in transient: ' . $stored_referer);
+
+            // Delete the transient immediately to prevent reuse
+            delete_transient($transient_key);
+
+            $requested_redirect = esc_url_raw($stored_referer);
+            error_log('[CSA Redirect Debug] Processing stored referer: ' . $requested_redirect);
 
             // Validate it's a local URL (same host as site)
             $requested_host = parse_url($requested_redirect, PHP_URL_HOST);
             $site_host = parse_url(home_url(), PHP_URL_HOST);
+            error_log('[CSA Redirect Debug] Requested host: ' . ($requested_host ?: 'empty') . ' | Site host: ' . $site_host);
 
             // Only allow redirect if:
             // 1. No host specified (relative URL like /my-page)
             // 2. Host matches site host
             if (empty($requested_host) || $requested_host === $site_host) {
-                $redirect_url = $requested_redirect;
+                error_log('[CSA Redirect Debug] Host validation passed');
+
+                // Check if redirect_to URL is one of the auth pages (login, register, lost_password, set_password)
+                // If so, ignore it and use default redirect_after_login
+                $page_mapping = isset($this->settings['page_mapping']) ? $this->settings['page_mapping'] : array();
+                $auth_page_ids = array(
+                    isset($page_mapping['login_page']) ? $page_mapping['login_page'] : 0,
+                    isset($page_mapping['register_page']) ? $page_mapping['register_page'] : 0,
+                    isset($page_mapping['lost_password_page']) ? $page_mapping['lost_password_page'] : 0,
+                    isset($page_mapping['set_password_page']) ? $page_mapping['set_password_page'] : 0,
+                );
+
+                // Get the page ID from the requested redirect URL
+                $requested_page_id = url_to_postid($requested_redirect);
+                error_log('[CSA Redirect Debug] Requested page ID: ' . $requested_page_id . ' | Auth page IDs: ' . implode(', ', $auth_page_ids));
+
+                // If the referrer is one of the auth pages, ignore it
+                if (in_array($requested_page_id, $auth_page_ids, true) && $requested_page_id !== 0) {
+                    error_log('[CSA Redirect Debug] BLOCKED: Redirect to auth page detected, using default redirect');
+                    // Don't redirect to auth pages, use default redirect_after_login
+                    // Keep the default redirect_url
+                } else {
+                    error_log('[CSA Redirect Debug] Not an auth page, checking role permissions');
+
+                    // Check if current user's role is in redirect_to_referrer_roles
+                    $redirect_to_referrer_roles = isset($global_config['redirect_to_referrer_roles']) ? $global_config['redirect_to_referrer_roles'] : array();
+                    error_log('[CSA Redirect Debug] Configured roles for referrer redirect: ' . (!empty($redirect_to_referrer_roles) ? implode(', ', $redirect_to_referrer_roles) : 'none'));
+
+                    if (!empty($redirect_to_referrer_roles) && is_array($redirect_to_referrer_roles)) {
+                        $current_user = wp_get_current_user();
+                        $user_roles = $current_user->roles;
+                        error_log('[CSA Redirect Debug] User roles: ' . implode(', ', $user_roles));
+
+                        // Check if any of the user's roles match the configured roles
+                        $role_matches = !empty(array_intersect($user_roles, $redirect_to_referrer_roles));
+                        error_log('[CSA Redirect Debug] Role match result: ' . ($role_matches ? 'YES' : 'NO'));
+
+                        if ($role_matches) {
+                            // User's role is configured for referrer redirect
+                            $redirect_url = $requested_redirect;
+                            error_log('[CSA Redirect Debug] SUCCESS: Redirecting to referrer: ' . $redirect_url);
+                        } else {
+                            error_log('[CSA Redirect Debug] BLOCKED: User role not in configured list, using default redirect');
+                        }
+                        // else: keep the default redirect_url from redirect_after_login setting
+                    } else {
+                        error_log('[CSA Redirect Debug] BLOCKED: No roles configured, using default redirect');
+                        // No roles configured, use default behavior (redirect_after_login page)
+                        // Don't override $redirect_url
+                    }
+                }
             } else {
+                error_log('[CSA Redirect Debug] BLOCKED: Host validation failed (potential open redirect)');
                 // Log potential open redirect attack attempt
                 $this->log_security_event('open_redirect_blocked', $this->get_user_ip(), array(
                     'attempted_redirect' => $requested_redirect,
                 ));
             }
+        } else {
+            error_log('[CSA Redirect Debug] No redirect_to parameter found in request');
         }
 
         return $redirect_url;
